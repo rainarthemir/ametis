@@ -2,13 +2,18 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Ametis Live Bus Map</title>
+  <title>Ametis Live Bus Map — Mobile Friendly</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div id="map"></div>
+
+  <!-- Кнопка "Показать всё" -->
+  <button id="resetViewBtn" title="Afficher tous les bus">
+    <i>👁️</i> Afficher tout
+  </button>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/protobufjs@7.3.2/dist/protobuf.min.js"></script>
