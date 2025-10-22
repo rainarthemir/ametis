@@ -4,7 +4,7 @@ html, body, #map {
   padding: 0;
 }
 
-/* 🚍 Кружок автобуса */
+/* 🚌 Автобусы */
 .bus-icon {
   border-radius: 50%;
   color: #fff;
@@ -19,14 +19,10 @@ html, body, #map {
   vertical-align: middle;
   box-sizing: border-box;
 }
-
-/* 🔴 Активная машина (выбранная) */
 .bus-icon.selected {
   border-color: red !important;
   box-shadow: 0 0 4px rgba(255, 0, 0, 0.6);
 }
-
-/* ↪️ Табличка направления */
 .bus-dir {
   display: inline-block;
   vertical-align: middle;
@@ -40,16 +36,15 @@ html, body, #map {
   margin-left: 4px;
   white-space: nowrap;
 }
-
 .bus-icon-wrap {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1001; /* выше всего остального */
+  z-index: 1001;
   position: relative;
 }
 
-/* 🚏 Подписи остановок */
+/* 🚏 Остановки */
 .stop-label {
   background: transparent;
   border: none;
@@ -57,7 +52,7 @@ html, body, #map {
   color: #333;
   text-shadow: 0 0 3px white;
   white-space: nowrap;
-  transform: translateX(10px); /* 👉 Сдвиг вправо */
+  transform: translateX(10px);
 }
 
 /* 🔘 Кнопка "Показать всё" */
@@ -73,7 +68,7 @@ html, body, #map {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
   transition: all 0.2s ease;
   z-index: 2000;
 }
@@ -81,4 +76,66 @@ html, body, #map {
   background: #333;
   color: white;
   transform: scale(1.05);
+}
+
+/* 📋 Правая панель */
+#sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 280px;
+  background: #f9f9f9;
+  box-shadow: -3px 0 8px rgba(0,0,0,0.2);
+  transform: translateX(100%);
+  transition: transform 0.3s ease;
+  z-index: 3000;
+  display: flex;
+  flex-direction: column;
+}
+#sidebar.open {
+  transform: translateX(0);
+}
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #e9ecef;
+  padding: 10px 12px;
+  border-bottom: 1px solid #ccc;
+}
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+}
+.routes-list {
+  max-height: calc(100vh - 150px);
+  overflow-y: auto;
+}
+.route-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.route-color {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid #555;
+}
+
+/* 📱 Адаптация для телефона */
+@media (max-width: 768px) {
+  #sidebar {
+    width: 80%;
+  }
+  .bus-dir {
+    display: none;
+  }
+  #resetViewBtn {
+    bottom: 70px;
+    right: 10px;
+  }
 }
