@@ -1,0 +1,2 @@
+agency_id,agency_name,agency_url,agency_timezone,agency_lang,agency_phone,agency_email,agency_fare_url
+ametis,Keolis Amiens,https://www.ametis.fr/,Europe/Paris,fr,09 70 82 07 22,,

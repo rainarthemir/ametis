@@ -1,0 +1,44 @@
+route_id,agency_id,route_short_name,route_long_name,route_desc,route_type,route_url,route_color,route_text_color,route_sort_order
+AMI:T36-1,ametis,T36,Vers-sur-Selle <> La Providence,,3,,E3C305,17202A,400
+AMI:T37-1,ametis,T37,Collège Jules Verne <> Le Ramponneau,,3,,FFF48F,17202A,410
+AMI:T38-1,ametis,T38,Collège Joliot-Curie <> Boves M. Barbier,,3,,F0D400,17202A,420
+AMI:T39-1,ametis,T39,Lycée le Paraclet <> Gare du Nord,,3,,FFF482,17202A,430
+AMI:T40-1,ametis,T40,Saleux <> Collège Jean Marc Laurent,,3,,B29F00,FFFFFF,440
+AMI:T41-1,ametis,T41,La Providence <> Nicole Fontaine,,3,,FFF48F,17202A,450
+AMI:T42-1,ametis,T42,Collège Edouard Lucas <> Gutenberg,,3,,E3C305,17202A,460
+AMI:T43-1,ametis,T43,Collège Edouard Lucas <> Général Foy,,3,,AE8F00,FFFFFF,470
+AMI:T44-1,ametis,T44,Collège Jean-Marc Laurent/Cite Providence <> Pont de Metz,,3,,C9C41B,17202A,480
+AMI:T45-1,ametis,T45,Pierre Corneille <> Lycée La Hotoie,,3,,E7E670,17202A,490
+AMI:T47-1,ametis,T47,Collège Jules Verne <> Camon Miroir,,3,,EEDE0F,17202A,500
+AMI:T49-1,ametis,T49,Guignemicourt <> Gare du Nord,,3,,EBD518,17202A,510
+AMI:10-1,ametis,10,CHU A. Picardie <> Boves M.Barbier/Centre commercial Glisy,,3,,CA366B,FFFFFF,110
+AMI:11-1,ametis,11,Etouvie <> Saleux,,3,,942A1F,FFFFFF,130
+AMI:12-1,ametis,12,Sains-en-Amiénois <> Bertangles,,3,,55B28A,FFFFFF,140
+AMI:13-1,ametis,13,Centre Commercial Glisy <> Gare du Nord,,3,,00484B,FFFFFF,150
+AMI:14-1,ametis,14,Petit Blangy <> Gare du Nord,,3,,715995,FFFFFF,160
+AMI:15-1,ametis,15,Dury <> Gare du Nord,,3,,E94D51,FFFFFF,200
+AMI:16-1,ametis,16,Saveuse <> Gare du Nord,,3,,688073,FFFFFF,240
+AMI:5A-1,ametis,5A,Laënnec,,3,,E87FB0,FFFFFF,51
+AMI:5B-1,ametis,5B,Laënnec,,3,,E87FB0,FFFFFF,52
+AMI:6-1,ametis,6,Pôle d'Echanges Nord <> Görlitz,,3,,59378C,FFFFFF,60
+AMI:7-1,ametis,7,CHU A.Picardie <> La Blanche Tâche Z.A,,3,,236332,FFFFFF,70
+AMI:8-1,ametis,8,Etouvie <> Gare du Nord,,3,,E46F0B,FFFFFF,90
+AMI:9-1,ametis,9,La Haute Borne - Allonville <> Vers-sur-Selle - Laënnec,,3,,60689A,FFFFFF,100
+AMI:CDV-1,ametis,CDV,Cœur De Ville,,3,,99C558,FFFFFF,250
+AMI:L-1,ametis,L,Pôle d’Echanges Nord/Centre Commercial Nord <>  CHU A.Picardie,,3,,84246C,FFFFFF,45
+AMI:N1-1,ametis,N1,Etouvie <> Pôle Jules Verne,,3,,2880C0,FFFFFF,10
+AMI:N2-1,ametis,N2,La Paix <> IUT P+R,,3,,CD2D20,FFFFFF,20
+AMI:N3-1,ametis,N3,Promenade P+R <> Centre commercial Sud,,3,,479D42,FFFFFF,30
+AMI:N4-1,ametis,N4,Pôle Licorne P+R <> Longueau SNCF,,3,,F0AB07,FFFFFF,40
+AMI:NAM1-1,ametis,M1,Navette marché St Maurice,,3,,5291CD,FFFFFF,260
+AMI:NAM2-1,ametis,M2,Navette marché St Pierre,,3,,79A6CC,FFFFFF,270
+AMI:NAVC-1,ametis,NAVC,Navette Toussaint,,3,,5191CD,FFFFFF,280
+AMI:RSG027,ametis,Nav7,Gare du Nord <> Voyelle,,3,,236332,FFFFFF,71
+AMI:RSG001,ametis,R61,Gare du Nord <> Remiencourt,,3,,00ADC2,FFFFFF,300
+AMI:RSG002,ametis,R62,Gare du Nord <> Estrees-sur-Noye,,3,,00ADC2,FFFFFF,310
+AMI:RSG003,ametis,R63,Gare du Nord <> Creuse,,3,,00ADC2,FFFFFF,320
+AMI:RSG004,ametis,R64,Mairie de Camon <> Camon Miroir,,3,,00ADC2,FFFFFF,340
+AMI:RSG007,ametis,R65,Gare du Nord <> Saint Vaast en chaussée,,3,,00ADC2,FFFFFF,341
+AMI:RSG008,ametis,R66,Gare du Nord <> Querrieu,,3,,00ADC2,FFFFFF,350
+AMI:RSG022,ametis,R68,Gare du Nord <> Crematorium,,3,,00ADC2,FFFFFF,365
+AMI:RSG017,ametis,T33,Chardin <> Roland Douay,,3,,ECDF2D,17202A,380

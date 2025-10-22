@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Ametis Live Bus Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<style>
+html, body, #map { height: 100%; margin:0; padding:0; }
+.bus-icon {
+  border-radius: 50%;
+  color: #fff;
+  text-align: center;
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 24px;
+  width: 24px; height: 24px;
+  border: 2px solid #fff;
+}
+@keyframes blink { 0%{opacity:1} 50%{opacity:.3} 100%{opacity:1} }
+.blink { animation: blink .8s infinite; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/protobufjs@7.3.2/dist/protobuf.min.js"></script>
+<script>
+/* ============================
+   Настройка + глобальные
+============================ */
+const map = L.map('map').setView([49.894, 2.295], 13);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+
+let FeedMessage;
+let markers = [];
+let currentShapeLayer = null;
+let stopLayer = L.layerGroup().addTo(map);
+let stopBlinkTimers = [];
+
+const stops = {};              // stop_id -> {stop_name, stop_lat, stop_lon}
+const routeColors = {};        // short_name(lower) -> color
+const routeNames = {};         // short_name(lower) -> original case (e.g., "N2")
+const tripsMain = {};          // gtfs/trips: trip_id -> {route_id, headsign}
+const trips2 = {};             // gtfs2/trips: trip_id -> {route_id, shape_id, headsign}
+const mergedTrips = {};        // trip_id(GTFS) -> shape_id(GTFS2)
+const shapes = {};             // shape_id -> [[lat, lon, seq], ...]
+const stopTimesByTrip = {};    // trip_id(GTFS) -> [{stop_id, sequence}, ...]
+let stopTimesIndexed = false;
+
+let currentSelected = { tripId: null, color: null, headsign: null, routeIdRT: null };
+
+// ✅ NEW: индекс для поиска линии по shape
+const shapeToRoute = {};  // shape_id -> { route_id, short_name_lower }
+
+/* ============================
+   Утилиты
+============================ */
+async function loadCsv(path) {
+  const res = await fetch(path);
+  const text = await res.text();
+  const [headerLine, ...lines] = text.trim().split(/\r?\n/);
+  const headers = headerLine.split(",");
+  return lines.map(line => {
+    const cols = line.split(",");
+    const obj = {};
+    headers.forEach((h,i)=>obj[h]=cols[i]);
+    return obj;
+  });
+}
+function nowMs(){ return Date.now(); }
+
+/* ============================
+   Загрузка кеша GTFS (+fallback)
+============================ */
+async function loadGtfsStatic() {
+  const cache = await fetch("data/gtfs_cache.json", {cache:"no-store"}).then(r=>r.ok?r.json():null).catch(()=>null);
+  if (cache) {
+    Object.assign(stops, cache.stops);
+    Object.assign(routeColors, cache.routeColors);
+    Object.assign(routeNames, cache.routeNames);
+    Object.assign(tripsMain, cache.tripsMain);
+    Object.assign(trips2, cache.trips2);
+    Object.assign(mergedTrips, cache.mergedTrips);
+    Object.assign(shapes, cache.shapes);
+    console.log("✅ Загружено из кеша:", Object.keys(stops).length,"остановок,", Object.keys(routeColors).length,"маршрутов.");
+    return;
+  }
+
+  console.warn("⚠️ Кеш не найден — загружаю CSV (единоразово, может быть дольше).");
+
+  const stopsList = await loadCsv("gtfs/stops.txt");
+  stopsList.forEach(s => {
+    stops[s.stop_id] = { stop_name: s.stop_name, stop_lat: s.stop_lat, stop_lon: s.stop_lon };
+  });
+
+  const routesMainList = await loadCsv("gtfs/routes.txt");
+  routesMainList.forEach(r => {
+    const shortName = (r.route_short_name||"").trim(); if(!shortName) return;
+    const lower = shortName.toLowerCase();
+    routeColors[lower] = "#" + (r.route_color?.padStart(6,"0") || "000000");
+    routeNames[lower] = r.route_short_name;
+  });
+
+  const tripsMainList = await loadCsv("gtfs/trips.txt");
+  tripsMainList.forEach(t => {
+    tripsMain[t.trip_id] = { route_id: t.route_id, headsign: t.trip_headsign };
+  });
+
+  const routes2List = await loadCsv("gtfs2/routes.txt");
+  routes2List.forEach(r => {
+    const shortName = (r.route_short_name||"").trim(); if(!shortName) return;
+    const lower = shortName.toLowerCase();
+    routeColors[lower] = "#" + (r.route_color?.padStart(6,"0") || "000000");
+    routeNames[lower] = r.route_short_name;
+  });
+
+  const trips2List = await loadCsv("gtfs2/trips.txt");
+  trips2List.forEach(t => {
+    trips2[t.trip_id] = { route_id: t.route_id, shape_id: t.shape_id, headsign: t.trip_headsign };
+
+    // ✅ NEW: создаём индекс shape → route
+    if (t.shape_id && t.route_id) {
+      const lower = (t.route_id || "").toLowerCase();
+      shapeToRoute[t.shape_id] = { route_id: t.route_id, short_name_lower: lower };
+    }
+  });
+
+  const shapesList = await loadCsv("gtfs2/shapes.txt");
+  shapesList.forEach(s => {
+    if (!shapes[s.shape_id]) shapes[s.shape_id] = [];
+    shapes[s.shape_id].push([parseFloat(s.shape_pt_lat), parseFloat(s.shape_pt_lon), parseInt(s.shape_pt_sequence)]);
+  });
+  for (const k in shapes) shapes[k].sort((a,b)=>a[2]-b[2]);
+
+  for (const [tripId, t] of Object.entries(tripsMain)) {
+    let match = null;
+    if (t.headsign) {
+      match = Object.values(trips2).find(t2 =>
+        t2.headsign &&
+        (t2.headsign.toLowerCase().includes(t.headsign.toLowerCase()) ||
+         t.headsign.toLowerCase().includes(t2.headsign.toLowerCase()))
+      );
+    }
+    if (!match && t.route_id) {
+      const routeMainName = Object.values(routeNames).find(rn => t.route_id.toLowerCase().includes(rn.toLowerCase()));
+      if (routeMainName) {
+        match = Object.values(trips2).find(t2 =>
+          t2.route_id && t2.route_id.toLowerCase().includes(routeMainName.toLowerCase())
+        );
+      }
+    }
+    if (match) mergedTrips[tripId] = match.shape_id;
+  }
+}
+
+/* ============================
+   Ленивый индекс stop_times.txt
+============================ */
+async function ensureStopTimesIndex() {
+  if (stopTimesIndexed) return;
+  console.log("⏳ Загружаю gtfs/stop_times.txt (один раз)...");
+  const list = await loadCsv("gtfs/stop_times.txt");
+  list.forEach(st => {
+    const tripId = st.trip_id;
+    if (!stopTimesByTrip[tripId]) stopTimesByTrip[tripId] = [];
+    stopTimesByTrip[tripId].push({ stop_id: st.stop_id, sequence: parseInt(st.stop_sequence) });
+  });
+  for (const t in stopTimesByTrip) stopTimesByTrip[t].sort((a,b)=>a.sequence-b.sequence);
+  stopTimesIndexed = true;
+  console.log("✅ Индекс остановок построен для", Object.keys(stopTimesByTrip).length, "трипов.");
+}
+
+/* ============================
+   Proto init
+============================ */
+async function initProto() {
+  const root = await protobuf.load("gtfs-realtime.proto");
+  FeedMessage = root.lookupType("transit_realtime.FeedMessage");
+}
+
+/* ============================
+   Цвет и короткое имя маршрута
+============================ */
+function extractShortFromRouteId(routeIdRT, headsign) {
+  const m = routeIdRT?.match(/(?:^|[-_])(N\d+|T\d+|L\d+|\d{1,3})(?:-|$)/i);
+  if (m) return m[1].toLowerCase();
+  return (headsign||"").toLowerCase();
+}
+function findRouteColorAndShortName(routeIdRT, headsign) {
+  const key = extractShortFromRouteId(routeIdRT, headsign);
+  for (const [shortLower, color] of Object.entries(routeColors)) {
+    if (key.includes(shortLower)) {
+      const displayName = routeNames[shortLower] || shortLower.toUpperCase();
+      return { color, shortName: displayName };
+    }
+  }
+  return { color: "#000000", shortName: "?" };
+}
+
+// ✅ NEW: поиск по shape_id
+function findRouteByShapeId(shapeId) {
+  const r = shapeToRoute[shapeId];
+  if (!r) return { color: "#000000", shortName: "?" };
+  for (const [shortLower, color] of Object.entries(routeColors)) {
+    if (r.short_name_lower.includes(shortLower)) {
+      const displayName = routeNames[shortLower] || shortLower.toUpperCase();
+      return { color, shortName: displayName };
+    }
+  }
+  return { color: "#000000", shortName: r.route_id || "?" };
+}
+
+/* ============================
+   Поиск shape_id для selection
+============================ */
+function resolveShapeIdForTrip(tripId, headsign, routeIdRT) {
+  if (mergedTrips[tripId]) return mergedTrips[tripId];
+  if (trips2[tripId]) return trips2[tripId].shape_id;
+  if (headsign) {
+    const m = Object.values(trips2).find(t => t.headsign && headsign.toLowerCase().includes(t.headsign.toLowerCase()));
+    if (m) return m.shape_id;
+  }
+  const key = extractShortFromRouteId(routeIdRT, headsign);
+  const candidate = Object.values(trips2).find(t => {
+    const rn = t.headsign||"";
+    return rn.toLowerCase().includes(key);
+  });
+  return candidate?.shape_id || null;
+}
+
+/* ============================
+   Отрисовка остановок маршрута
+============================ */
+function clearStopLayer() {
+  stopBlinkTimers.forEach(id => clearInterval(id));
+  stopBlinkTimers = [];
+  stopLayer.clearLayers();
+}
+function drawTripStopsUsingStatic(tripIdForStops, nextStopId) {
+  clearStopLayer();
+  const list = stopTimesByTrip[tripIdForStops];
+  if (!list || !list.length) return;
+  const nextIdx = nextStopId ? list.findIndex(s => s.stop_id === nextStopId) : -1;
+  list.forEach((st, idx) => {
+    const stop = stops[st.stop_id];
+    if (!stop || !stop.stop_lat) return;
+    let fill = "white";
+    if (nextIdx >= 0) {
+      if (idx < nextIdx) fill = "#ccc";
+      else if (idx === nextIdx) fill = "yellow";
+      else fill = "white";
+    }
+    const circle = L.circleMarker([+stop.stop_lat, +stop.stop_lon], {
+      radius: 5, color: "black", weight: 1, fillColor: fill, fillOpacity: 1, className: (idx===nextIdx?"blink":"")
+    });
+    circle.bindTooltip(stop.stop_name, { permanent: true, direction: "right", offset: [8,0] });
+    circle.addTo(stopLayer);
+    if (idx === nextIdx) {
+      let visible = true;
+      const timer = setInterval(() => {
+        visible = !visible;
+        circle.setStyle({ fillOpacity: visible ? 1 : 0.3 });
+      }, 600);
+      stopBlinkTimers.push(timer);
+    }
+  });
+}
+
+/* ============================
+   Загрузка GTFS-RT
+============================ */
+async function fetchFeed(url){
+  const res = await fetch(url);
+  const buf = await res.arrayBuffer();
+  return FeedMessage.decode(new Uint8Array(buf));
+}
+
+/* ============================
+   Главный цикл
+============================ */
+async function loadVehicles() {
+  try{
+    const [posFeed, tripFeed] = await Promise.all([
+      fetchFeed("https://proxy.transport.data.gouv.fr/resource/ametis-amiens-gtfs-rt-vehicle-position"),
+      fetchFeed("https://proxy.transport.data.gouv.fr/resource/ametis-amiens-gtfs-rt-trip-update")
+    ]);
+
+    const tripUpdates = {};
+    tripFeed.entity.forEach(e => {
+      const tid = e.tripUpdate?.trip?.tripId;
+      if (tid) tripUpdates[tid] = e.tripUpdate;
+    });
+
+    markers.forEach(m => map.removeLayer(m));
+    markers = [];
+
+    posFeed.entity.filter(e=>e.vehicle && e.vehicle.position).forEach(e=>{
+      const v = e.vehicle;
+      const tripId   = v.trip?.tripId;
+      const headsign = v.trip?.tripHeadsign;
+      const routeIdRT = v.trip?.routeId;
+      let { color, shortName } = findRouteColorAndShortName(routeIdRT, headsign);
+
+      let nextStopId = null, nextStopName = "—";
+      const tu = tripUpdates[tripId];
+      if (tu?.stopTimeUpdate?.length) {
+        const next = tu.stopTimeUpdate.find(s => s.arrival?.time*1000 > nowMs()) || tu.stopTimeUpdate[0];
+        if (next) {
+          nextStopId = next.stopId;
+          nextStopName = stops[next.stopId]?.stop_name || next.stopId;
+        }
+      }
+
+      const iconHtml = `<div class="bus-icon" style="background:${color};">${shortName}</div>`;
+      const icon = L.divIcon({ html: iconHtml, className:'', iconSize:[28,28] });
+      const marker = L.marker([v.position.latitude, v.position.longitude], { icon })
+        .addTo(map)
+        .bindPopup(`<b>${shortName}</b><br>Следующая остановка: ${nextStopName}`);
+
+      marker.on('click', async () => {
+        currentSelected = { tripId, color, headsign, routeIdRT };
+
+        if (currentShapeLayer) { map.removeLayer(currentShapeLayer); currentShapeLayer=null; }
+        const shapeId = resolveShapeIdForTrip(tripId, headsign, routeIdRT);
+
+        if (shapeId && shapes[shapeId]) {
+          // ✅ NEW: fallback цвет/название по shape
+          if (shortName === "?" || !color || color === "#000000") {
+            const alt = findRouteByShapeId(shapeId);
+            color = alt.color;
+            shortName = alt.shortName;
+          }
+
+          const pts = shapes[shapeId].map(p => [p[0], p[1]]);
+          currentShapeLayer = L.polyline(pts, { color, weight: 4 }).addTo(map);
+          map.fitBounds(currentShapeLayer.getBounds());
+        }
+
+        await ensureStopTimesIndex();
+        const tripForStops = findCompatibleTripId(tripId, headsign, routeIdRT);
+        if (tripForStops) {
+          drawTripStopsUsingStatic(tripForStops, nextStopId);
+        } else {
+          clearStopLayer();
+          console.warn("Нет stop_times для трипа и не найден совместимый:", tripId, headsign);
+        }
+      });
+
+      markers.push(marker);
+    });
+
+    if (currentSelected.tripId) {
+      const tu = tripFeed.entity.find(e => e.tripUpdate?.trip?.tripId === currentSelected.tripId)?.tripUpdate;
+      let nextStopId = null;
+      if (tu?.stopTimeUpdate?.length) {
+        const next = tu.stopTimeUpdate.find(s => s.arrival?.time*1000 > nowMs()) || tu.stopTimeUpdate[0];
+        nextStopId = next?.stopId || null;
+      }
+      if (stopTimesIndexed) {
+        const tripForStops = findCompatibleTripId(currentSelected.tripId, currentSelected.headsign, currentSelected.routeIdRT);
+        if (tripForStops) drawTripStopsUsingStatic(tripForStops, nextStopId);
+      }
+    }
+
+    console.log("Обновлено:", markers.length, "машин");
+  } catch(err) {
+    console.error("Ошибка загрузки:", err);
+  }
+}
+
+/* ============================
+   Инициализация
+============================ */
+(async ()=>{
+  await initProto();
+  await loadGtfsStatic();
+  await loadVehicles();
+  setInterval(loadVehicles, 15000);
+})();
+</script>
+</body>
+</html>
