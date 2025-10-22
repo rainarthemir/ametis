@@ -2,26 +2,36 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Ametis RT Vh positions</title>
-  <!-- Bootstrap CSS -->
-  <link
-    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
-    rel="stylesheet"
-  />
-
-  <!-- Bootstrap JS (для кнопок, модалок и т.д.) -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-
+  <title>Ametis Live Bus Map — Route Explorer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div id="map"></div>
-  <button id="resetViewBtn" title="Afficher Tout">Afficher tout</button>
+
+  <!-- Панель справа -->
+  <div id="sidebar">
+    <div class="sidebar-header">
+      <h6 class="m-0">Lignes Ametis</h6>
+      <button id="toggleSidebar" class="btn btn-sm btn-light border">
+        <i class="bi bi-chevron-right"></i>
+      </button>
+    </div>
+    <div class="sidebar-content">
+      <button id="toggleAll" class="btn btn-sm btn-outline-primary w-100 mb-2">Tout sélectionner</button>
+      <div id="routesList" class="routes-list"></div>
+    </div>
+  </div>
+
+  <!-- Кнопка показать всё -->
+  <button id="resetViewBtn" title="Показать все маршруты">Afficher tout</button>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/protobufjs@7.3.2/dist/protobuf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
-
