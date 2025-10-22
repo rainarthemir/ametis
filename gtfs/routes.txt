@@ -1,0 +1,23 @@
+route_id,agency_id,route_short_name,route_long_name,route_type
+10,KEOL,10,LIGNE 10,3
+11,KEOL,11,LIGNE 11,3
+12,KEOL,12,LIGNE 12,3
+13,KEOL,13,LIGNE 13,3
+14,KEOL,14,LIGNE 14,3
+15,KEOL,15,LIGNE 15,3
+16,KEOL,16,LIGNE 16,3
+5A,KEOL,5A,LIGNE 5A,3
+5B,KEOL,5B,LIGNE 5B,3
+6,KEOL,6,LIGNE 6,3
+7,KEOL,7,LIGNE 7,3
+8,KEOL,8,LIGNE 8,3
+9,KEOL,9,LIGNE 9,3
+CDV,KEOL,CDV,Coeur de ville,3
+L,KEOL,L,Lianes,3
+N1,KEOL,N1,Nemo 1 Bleu,3
+N2,KEOL,N2,Nemo 2 Rouge,3
+N3,KEOL,N3,Nemo 3 Verte,3
+N4,KEOL,N4,Nemo 4 Jaune,3
+NAM1,KEOL,NAM1,Navette marche Ambonne,3
+NAM2,KEOL,NAM2,Navette marche Duclos,3
+NAVC,KEOL,NAVC,Navette cimetiere,3
