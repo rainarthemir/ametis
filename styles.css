@@ -59,6 +59,7 @@ html, body, #map {
 }
 
 /* --- Кнопка "Показать всё" --- */
+/* --- Кнопка "Показать всё" --- */
 #resetViewBtn {
   position: fixed;
   bottom: 20px;
@@ -67,13 +68,13 @@ html, body, #map {
   color: #333;
   border: 2px solid #555;
   border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 13px;
+  padding: 10px 14px;
+  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   box-shadow: 0 2px 6px rgba(0,0,0,0.25);
   transition: all 0.2s ease;
-  z-index: 9999;
+  z-index: 9999; /* 👈 чтобы карта не перекрывала кнопку */
 }
 #resetViewBtn:hover {
   background: #333;
