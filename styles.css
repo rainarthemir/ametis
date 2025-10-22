@@ -1,0 +1,84 @@
+html, body, #map {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* 🚍 Кружок автобуса */
+.bus-icon {
+  border-radius: 50%;
+  color: #fff;
+  text-align: center;
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 26px;
+  width: 26px;
+  height: 26px;
+  border: 2px solid #fff;
+  display: inline-block;
+  vertical-align: middle;
+  box-sizing: border-box;
+}
+
+/* 🔴 Активная машина (выбранная) */
+.bus-icon.selected {
+  border-color: red !important;
+  box-shadow: 0 0 4px rgba(255, 0, 0, 0.6);
+}
+
+/* ↪️ Табличка направления */
+.bus-dir {
+  display: inline-block;
+  vertical-align: middle;
+  background: white;
+  color: #222;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-weight: 500;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
+.bus-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1001; /* выше всего остального */
+  position: relative;
+}
+
+/* 🚏 Подписи остановок */
+.stop-label {
+  background: transparent;
+  border: none;
+  font-size: 10px;
+  color: #333;
+  text-shadow: 0 0 3px white;
+  white-space: nowrap;
+  transform: translateX(10px); /* 👉 Сдвиг вправо */
+}
+
+/* 🔘 Кнопка "Показать всё" */
+#resetViewBtn {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  background: white;
+  color: #333;
+  border: 2px solid #555;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  transition: all 0.2s ease;
+  z-index: 2000;
+}
+#resetViewBtn:hover {
+  background: #333;
+  color: white;
+  transform: scale(1.05);
+}
