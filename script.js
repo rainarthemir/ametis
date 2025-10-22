@@ -214,6 +214,15 @@ function updateVisibleVehicles(tripUpdates) {
   console.log("🚍 Отображено:", markers.length, "машин", currentRouteId ? "(фильтр активен)" : "");
 }
 
+/* ===== Кнопка "Показать всё" ===== */
+document.getElementById("resetViewBtn").addEventListener("click", ()=>{
+  currentRouteId = null;
+  currentTripId = null;
+  if (currentShapeLayer) map.removeLayer(currentShapeLayer);
+  clearStopLayer();
+  updateVisibleVehicles();
+});
+
 /* ===== Инициализация ===== */
 (async ()=>{
   await initProto();
