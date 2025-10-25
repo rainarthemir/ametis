@@ -228,5 +228,5 @@ document.getElementById("resetViewBtn").addEventListener("click", ()=>{
   await initProto();
   await loadStaticData();
   await loadVehicles();
-  setInterval(loadVehicles, 10000);
+  setInterval(loadVehicles, 1000);
 })();
