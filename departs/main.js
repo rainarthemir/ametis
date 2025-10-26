@@ -1,4 +1,4 @@
-// main.js — улучшенный вариант для группировки и полного списка отправлений
+// main.js — исправленный вариант с корректной группировкой и fallback из GTFS static
 
 // ---------- НАСТРОЙКИ ----------
 const GTFS_BASE = "../gtfs/";
@@ -24,12 +24,12 @@ const departuresList = document.getElementById("departuresList");
 let stops = [];
 let routes = {};
 let routes2ByShort = {};
-let stopTimes = [];
 let trips = [];
+let stopTimes = [];
+let calendar = [];
 let mergedStops = {};
 let protoRoot = null;
 let currentMergedKey = null;
-let liveTimer = null;
 let pendingFetchPromise = null;
 
 // ---------- Утилиты ----------
@@ -55,28 +55,29 @@ function safeGet(obj, ...path) {
   );
 }
 
-function loadCSV(path) {
-  return fetch(path)
-    .then(r => {
-      if (!r.ok) throw new Error("Ошибка загрузки " + path);
-      return r.text();
-    })
-    .then(txt => Papa.parse(txt, { header: true, skipEmptyLines: true }).data);
+async function loadCSV(path) {
+  const r = await fetch(path);
+  if (!r.ok) throw new Error("Ошибка загрузки " + path);
+  const txt = await r.text();
+  return Papa.parse(txt, { header: true, skipEmptyLines: true }).data;
 }
 
 // ---------- Загрузка GTFS ----------
 async function loadGTFS() {
   logStatus("Загружаю GTFS...");
-  const [stopsData, routesData, routes2Data, stopTimesData, tripsData] = await Promise.all([
+  const [stopsData, routesData, routes2Data, tripsData, stopTimesData, calendarData] = await Promise.all([
     loadCSV(GTFS_BASE + "stops.txt"),
     loadCSV(GTFS_BASE + "routes.txt"),
     loadCSV(GTFS2_BASE + "routes.txt").catch(() => []),
-    loadCSV(GTFS_BASE + "stop_times.txt").catch(() => []),
     loadCSV(GTFS_BASE + "trips.txt").catch(() => []),
+    loadCSV(GTFS_BASE + "stop_times.txt").catch(() => []),
+    loadCSV(GTFS_BASE + "calendar.txt").catch(() => []),
   ]);
+
   stops = stopsData;
-  stopTimes = stopTimesData;
   trips = tripsData;
+  stopTimes = stopTimesData;
+  calendar = calendarData;
 
   routes = {};
   for (const r of routesData) if (r.route_id) routes[r.route_id] = r;
@@ -85,21 +86,35 @@ async function loadGTFS() {
   for (const r of routes2Data)
     if (r.route_short_name) routes2ByShort[r.route_short_name] = r;
 
-  logStatus(
-    `GTFS загружен: stops=${stops.length}, stop_times=${stopTimes.length}, trips=${trips.length}`
-  );
+  buildMergedStops();
+
+  console.log("✅ Загружено GTFS:", {
+    stops: stops.length,
+    routes: Object.keys(routes).length,
+    trips: trips.length,
+    stop_times: stopTimes.length,
+  });
 }
 
-// ---------- Объединение остановок ----------
+// ---------- Улучшенная нормализация ----------
 function normalizeNameForGroup(name) {
   if (!name) return "";
-  return name
-    .replace(/\s*[-–—]\s*/g, " ")
-    .replace(/\b(?:Quai|Quais|Voie|Platform|Plateforme|Bus|Tram|Train|Métro|Metro)\b[^\n,]*/gi, "")
-    .replace(/\(.*?\)/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
+  let s = name;
+
+  // убираем Quai/Voie/Platform + всё после
+  s = s.replace(/\b(?:Quai|Quais|Voie|Platform|Plateforme)\b[^\n,]*/gi, "");
+
+  // убираем скобки (Bus, Tram, и т.д.)
+  s = s.replace(/\(.*?\)/g, "");
+
+  // убираем одиночные буквы/цифры в конце (A, B, F, 1, 2)
+  s = s.replace(/\s+[A-Z0-9]{1,2}$/i, "");
+
+  // чистим тире, пробелы
+  s = s.replace(/\s*[-–—]\s*/g, " ");
+  s = s.replace(/\s+/g, " ").trim();
+
+  return s.toLowerCase();
 }
 
 function detectPlatformFromName(name) {
@@ -127,6 +142,11 @@ function buildMergedStops() {
   }
   for (const k of Object.keys(mergedStops))
     mergedStops[k].platforms = Array.from(mergedStops[k].platforms).sort();
+
+  console.log("🔍 Проверка группировки:");
+  Object.entries(mergedStops)
+    .slice(0, 30)
+    .forEach(([k, v]) => console.log(k, "→", v.memberStopIds.length, "остановок"));
 }
 
 // ---------- Поиск ----------
@@ -147,12 +167,12 @@ function searchMergedStops(q) {
   return res.slice(0, 30);
 }
 
-// ---------- Proto ----------
+// ---------- Загрузка proto ----------
 async function loadProto() {
   protoRoot = await protobuf.load(PROTO_PATH);
 }
 
-// ---------- Реальное время ----------
+// ---------- Декодирование RT ----------
 async function fetchRTandDecode() {
   if (!protoRoot) throw new Error("protoRoot не загружен");
   const r = await fetch(RT_URL);
@@ -163,7 +183,7 @@ async function fetchRTandDecode() {
   return FeedMessage.toObject(decoded, { longs: String, enums: String, bytes: String });
 }
 
-// ---------- Отправления ----------
+// ---------- Получение расписаний ----------
 async function collectDeparturesForMergedKey(key, platformFilterVal, windowMinutes) {
   const merged = mergedStops[key];
   if (!merged) return [];
@@ -171,6 +191,7 @@ async function collectDeparturesForMergedKey(key, platformFilterVal, windowMinut
   const windowEnd = now + (windowMinutes || DEFAULT_WINDOW_MIN) * 60;
   let departures = [];
 
+  // --- 1. Пытаемся получить реальное время (RT)
   try {
     const feed = await fetchRTandDecode();
     if (feed.entity && Array.isArray(feed.entity)) {
@@ -185,7 +206,7 @@ async function collectDeparturesForMergedKey(key, platformFilterVal, windowMinut
           const stopId = stu.stop_id || stu.stopId;
           if (!merged.memberStopIds.includes(stopId)) continue;
 
-          const depObj = stu.departure || stu.departure_time || stu.arrival || stu.arrival_time;
+          const depObj = stu.departure || stu.arrival;
           const depTs = depObj ? Number(depObj.time || depObj) : null;
           if (!depTs || depTs < now || depTs > windowEnd) continue;
 
@@ -220,36 +241,48 @@ async function collectDeparturesForMergedKey(key, platformFilterVal, windowMinut
             platform,
             departureTime: depTs,
             color,
+            source: "RT",
           });
         }
       }
     }
   } catch (e) {
-    console.warn("RT feed error:", e.message);
+    console.warn("⚠️ Ошибка RT:", e.message);
   }
 
-  // ---------- fallback: если RT пуст, подставляем теоретические из stop_times ----------
+  // --- 2. Если RT пуст, добавляем из статического GTFS
   if (departures.length === 0 && stopTimes.length) {
-    const todaySec = now % 86400;
+    console.log("⏳ RT пуст — fallback на GTFS static");
+    const nowObj = new Date();
+    const secondsToday = nowObj.getHours() * 3600 + nowObj.getMinutes() * 60 + nowObj.getSeconds();
+    const weekday = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"][nowObj.getDay()];
+
+    const activeServices = calendar
+      .filter(c => c[weekday] === "1")
+      .map(c => c.service_id);
+
     for (const st of stopTimes) {
       if (!merged.memberStopIds.includes(st.stop_id)) continue;
       const [h, m, s] = (st.departure_time || st.arrival_time || "00:00:00").split(":").map(Number);
       const sec = h * 3600 + m * 60 + (s || 0);
-      if (sec < todaySec || sec > todaySec + (windowMinutes * 60)) continue;
+      if (sec < secondsToday || sec > secondsToday + (windowMinutes * 60)) continue;
 
-      const trip = trips.find(t => t.trip_id === st.trip_id);
-      const route = trip ? routes[trip.route_id] : {};
+      const trip = trips.find(t => t.trip_id === st.trip_id && activeServices.includes(t.service_id));
+      if (!trip) continue;
+
+      const route = routes[trip.route_id] || {};
       const color = route?.route_color ? "#" + route.route_color : "#555";
 
       departures.push({
         tripId: st.trip_id,
-        routeId: trip?.route_id,
-        routeShort: route?.route_short_name,
-        headsign: trip?.trip_headsign || "",
+        routeId: trip.route_id,
+        routeShort: route.route_short_name,
+        headsign: trip.trip_headsign || "",
         stopId: st.stop_id,
         platform: stops.find(s => s.stop_id === st.stop_id)?.platform_code || "",
-        departureTime: (Math.floor(Date.now() / 1000 / 86400) * 86400) + sec,
+        departureTime: Math.floor(now / 86400) * 86400 + sec,
         color,
+        source: "GTFS",
       });
     }
   }
@@ -313,7 +346,8 @@ function renderDepartures(deps) {
     const info = document.createElement("div");
     info.className = "info";
     info.innerHTML = `<div><strong>${d.headsign || "—"}</strong></div>
-                      <div style="color:var(--muted);font-size:13px">${d.stopId} ${d.platform ? "• платф. " + d.platform : ""}</div>`;
+      <div style="color:var(--muted);font-size:13px">${d.stopId} ${d.platform ? "• платф. " + d.platform : ""}</div>
+      <div style="font-size:11px;color:#888">${d.source || ""}</div>`;
 
     const timeDiv = document.createElement("div");
     timeDiv.className = "time";
@@ -324,7 +358,7 @@ function renderDepartures(deps) {
   }
 }
 
-// ---------- Логика ----------
+// ---------- Основная логика ----------
 async function runFetchAndRender() {
   if (!currentMergedKey || pendingFetchPromise) return;
   const platformVal = platformFilter.value || "";
@@ -346,7 +380,6 @@ async function runFetchAndRender() {
 async function init() {
   try {
     await loadGTFS();
-    buildMergedStops();
     await loadProto();
     logStatus("Готово — можно искать остановку.");
 
@@ -354,7 +387,7 @@ async function init() {
     platformFilter.onchange = () => runFetchAndRender();
     windowMinutesInput.onchange = () => runFetchAndRender();
 
-    liveTimer = setInterval(() => {
+    setInterval(() => {
       if (currentMergedKey) runFetchAndRender();
     }, REFRESH_INTERVAL_MS);
   } catch (e) {
