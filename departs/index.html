@@ -1,33 +1,48 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Départs en temps réel – Ametis</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Départs en temps réel — Ametis</title>
   <link rel="stylesheet" href="style.css" />
+  <!-- PapaParse для CSV; protobuf.js для .proto -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/protobufjs@7.2.4/dist/protobuf.min.js"></script>
 </head>
 <body>
   <header>
-    <h1>Départs en temps réel – Réseau Ametis</h1>
+    <h1>Départs en temps réel — Ametis</h1>
+    <p class="muted">Поиск остановок, объединение платформ, отображение отправлений</p>
   </header>
 
   <main>
-    <section id="stop-selector">
-      <label for="stop">Choisissez un arrêt :</label>
-      <input type="text" id="stop" placeholder="Ex: Gare du Nord" />
-      <ul id="suggestions"></ul>
+    <section class="controls">
+      <input id="q" placeholder="Поиск остановки (минимум 2 символа)..." autocomplete="off" />
+      <div id="suggestions" class="suggestions"></div>
+
+      <div id="selectedArea" class="selected-area hidden">
+        <h2 id="stopName"></h2>
+        <label>Платформа:
+          <select id="platformFilter"><option value="">Все</option></select>
+        </label>
+        <label>Окно (мин):
+          <input id="windowMinutes" type="number" value="120" min="5" max="1440" />
+        </label>
+        <button id="refreshBtn">Обновить</button>
+      </div>
     </section>
 
-    <section id="departures">
-      <h2>Prochains départs</h2>
-      <div id="results"></div>
+    <section id="departuresArea">
+      <h3>Пропуски / статусы</h3>
+      <div id="status" class="status">Загрузка данных...</div>
+      <div id="departuresList"></div>
     </section>
   </main>
 
   <footer>
-    <p>© 2025 – Projet GTFS temps réel</p>
+    <small>© 2025 — Прототип. Источник RT: proxy.transport.data.gouv.fr</small>
   </footer>
 
-  <script src="script.js"></script>
+  <script src="main.js"></script>
 </body>
 </html>
