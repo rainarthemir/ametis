@@ -99,23 +99,28 @@ async function loadGTFS() {
 // ---------- Улучшенная нормализация ----------
 function normalizeNameForGroup(name) {
   if (!name) return "";
-  let s = name;
+  let s = name
+    // убираем всё после слов Quai, Voie, Platform, Plateforme и пр.
+    .replace(/\b(?:Quai|Quais|Voie|Voies|Platform|Plateforme)\b.*$/i, "")
+    // убираем содержимое скобок
+    .replace(/\(.*?\)/g, "")
+    // убираем одиночную букву или цифру в конце (A–Z, 0–9)
+    .replace(/\s+[A-Z0-9]{1,2}$/i, "")
+    // убираем дефисы и лишние пробелы
+    .replace(/[-–—]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
 
-  // убираем Quai/Voie/Platform + всё после
-  s = s.replace(/\b(?:Quai|Quais|Voie|Platform|Plateforme)\b[^\n,]*/gi, "");
+  // особые правки для единообразия названий
+  s = s
+    .replace(/\barrêt\b/gi, "")
+    .replace(/\bstation\b/gi, "")
+    .trim();
 
-  // убираем скобки (Bus, Tram, и т.д.)
-  s = s.replace(/\(.*?\)/g, "");
-
-  // убираем одиночные буквы/цифры в конце (A, B, F, 1, 2)
-  s = s.replace(/\s+[A-Z0-9]{1,2}$/i, "");
-
-  // чистим тире, пробелы
-  s = s.replace(/\s*[-–—]\s*/g, " ");
-  s = s.replace(/\s+/g, " ").trim();
-
-  return s.toLowerCase();
+  return s;
 }
+
 
 function detectPlatformFromName(name) {
   if (!name) return null;
