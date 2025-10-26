@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Départs en temps réel – Ametis</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>Départs en temps réel – Réseau Ametis</h1>
+  </header>
+
+  <main>
+    <section id="stop-selector">
+      <label for="stop">Choisissez un arrêt :</label>
+      <input type="text" id="stop" placeholder="Ex: Gare du Nord" />
+      <ul id="suggestions"></ul>
+    </section>
+
+    <section id="departures">
+      <h2>Prochains départs</h2>
+      <div id="results"></div>
+    </section>
+  </main>
+
+  <footer>
+    <p>© 2025 – Projet GTFS temps réel</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
