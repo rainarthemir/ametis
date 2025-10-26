@@ -7,7 +7,7 @@
 *{box-sizing:border-box}
 body{
   margin:0;
-  font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial;
   background:var(--bg);
   color:#111;
 }
@@ -20,16 +20,36 @@ header{
 }
 header .muted{opacity:.9;margin:4px 0 0;font-size:13px}
 
-main{max-width:980px;margin:18px auto;padding:20px;background:#fff;border-radius:8px;box-shadow:0 6px 20px rgba(10,20,40,0.06)}
+main{
+  max-width:980px;
+  margin:18px auto;
+  padding:20px;
+  background:#fff;
+  border-radius:8px;
+  box-shadow:0 6px 20px rgba(10,20,40,.06)
+}
 
 .controls{display:flex;flex-direction:column;gap:10px}
 #q{padding:10px;font-size:16px;border:1px solid #ddd;border-radius:6px}
 
-.suggestions{border:1px solid #e6e6e6;background:#fff;border-radius:6px;max-height:220px;overflow:auto;padding:6px}
+.suggestions{
+  border:1px solid #e6e6e6;
+  background:#fff;
+  border-radius:6px;
+  max-height:220px;
+  overflow:auto;
+  padding:6px
+}
 .suggestions .item{padding:8px;border-radius:6px;cursor:pointer}
 .suggestions .item:hover{background:#f2f6fb}
 
-.selected-area{display:flex;align-items:center;gap:12px;margin-top:10px}
+.selected-area{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:12px;
+  margin-top:10px
+}
 .hidden{display:none}
 
 label{font-size:14px;color:var(--muted)}
@@ -37,14 +57,32 @@ select,input[type=number]{padding:6px;border-radius:6px;border:1px solid #ddd;ma
 
 #departuresList{margin-top:14px}
 .departure{
-  display:flex;align-items:center;gap:12px;padding:10px;border-radius:8px;background:#fff;border:1px solid #eef2f6;margin-bottom:8px;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:10px;
+  border-radius:8px;
+  background:#fff;
+  border:1px solid #eef2f6;
+  margin-bottom:8px
 }
 .route-badge{
-  min-width:46px;padding:6px 10px;border-radius:6px;color:#fff;font-weight:600;text-align:center;
-  box-shadow:0 1px 0 rgba(0,0,0,0.06);font-family:monospace;
+  min-width:46px;
+  padding:6px 10px;
+  border-radius:6px;
+  color:#fff;
+  font-weight:600;
+  text-align:center;
+  box-shadow:0 1px 0 rgba(0,0,0,.06)
 }
 .info{flex:1}
 .time{font-weight:700;font-size:16px;min-width:90px;text-align:right}
 
-.status{padding:8px;border-radius:6px;background:#fff;border:1px solid #f0f0f0;color:var(--muted)}
+.status{
+  padding:8px;
+  border-radius:6px;
+  background:#fff;
+  border:1px solid #f0f0f0;
+  color:var(--muted)
+}
 footer{text-align:center;margin:12px 0;color:#888}
