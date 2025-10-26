@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Ametis Live Tracker</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+</head>
+<body>
+
+<!-- Верхняя панель -->
+<div id="top-banner">
+  <div id="route-square"><span id="route-id">--</span></div>
+  <div id="next-stop-banner">
+    PROCHAINE ARRÊT:&nbsp;<span id="next-stop-name">--</span>
+  </div>
+</div>
+
+<!-- Основная область -->
+<div id="app">
+  <div id="dashboard">
+    <div id="trip-select">
+      <label for="tripList">Sélectionner un trip:</label>
+      <select id="tripList">
+        <option value="">-- choisir un trip actif --</option>
+      </select>
+    </div>
+
+    <div id="stops-display"></div>
+  </div>
+
+  <div id="map">
+    <div id="no-bus-msg" class="hidden">🚫 Aucun bus en service actuellement</div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/protobufjs@7.2.5/dist/protobuf.min.js"></script>
+<script src="main.js"></script>
+</body>
+</html>

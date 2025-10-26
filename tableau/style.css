@@ -1,0 +1,185 @@
+body {
+    margin: 0;
+    font-family: "Inter", Arial, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    background: white;
+  }
+  
+  /* ===== Верхняя панель ===== */
+  #top-banner {
+    display: flex;
+    align-items: center;
+    height: 100px;
+    width: 100%;
+    background: white;
+    position: relative;
+  }
+  
+  #route-square {
+    width: 120px;
+    height: 100%;
+    background: black;
+    color: white;
+    font-size: 52px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  #next-stop-banner {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 44px;
+    font-weight: 700;
+    color: black;
+    text-align: center;
+    white-space: nowrap;
+  }
+  
+  /* ===== Основной контент ===== */
+  #app {
+    display: flex;
+    width: 100%;
+    height: calc(100vh - 100px);
+  }
+  
+  #dashboard {
+    width: 50%;
+    background: white;
+    display: flex;
+    flex-direction: column;
+    border-right: 2px solid #000;
+  }
+  
+  #trip-select {
+    padding: 15px 25px;
+    font-size: 20px;
+    border-bottom: 2px solid #ddd;
+    background: #fff;
+  }
+  
+  #trip-select select {
+    font-size: 18px;
+    padding: 6px 10px;
+  }
+  
+  /* ===== Табло с остановками ===== */
+  #stops-display {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 10px 80px 40px 80px;
+    gap: 55px;
+    position: relative;
+    transform: translateY(-15px);
+  }
+  
+  .stop-row {
+    display: flex;
+    align-items: center;
+    font-size: 38px;
+    font-weight: 600;
+    position: relative;
+    height: 90px;
+  }
+  
+  /* Вертикальные линии между остановками */
+  .stop-row:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    left: 26px;
+    top: calc(50% + 24px);
+    width: 14px;
+    height: 100px;
+    background: var(--line-color, black);
+    border-radius: 6px;
+    z-index: 1;
+  }
+  
+  /* Нижняя линия адаптивная */
+  .stop-row:last-child::after {
+    content: "";
+    position: absolute;
+    left: 26px;
+    top: calc(50% + 24px);
+    width: 14px;
+    bottom: 0;
+    background: var(--line-color, black);
+    border-radius: 6px;
+    z-index: 0;
+  }
+  
+  .stop-circle {
+    width: 54px;
+    height: 54px;
+    border: 6px solid black;
+    border-radius: 50%;
+    background: white;
+    z-index: 2;
+    flex-shrink: 0;
+    margin-right: 25px;
+  }
+  
+  .stop-name {
+    flex: 1;
+    z-index: 2;
+  }
+  
+  .stop-active .stop-circle {
+    background: yellow;
+    animation: blink 1s infinite alternate;
+  }
+  
+  @keyframes blink {
+    0% { background: yellow; }
+    100% { background: white; }
+  }
+  
+  /* ===== Карта ===== */
+  #map {
+    width: 50%;
+    height: 100%;
+    position: relative;
+  }
+  
+  /* Автобусный кружок */
+  .bus-circle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: 3px solid white;
+    border-radius: 50%;
+    color: white;
+    font-weight: 700;
+    text-align: center;
+    line-height: 1;
+    font-size: 16px;
+    box-shadow: 0 0 6px rgba(0,0,0,0.3);
+  }
+  
+  /* Сообщение "Нет автобусов" */
+  #no-bus-msg {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(255,255,255,0.9);
+    color: #333;
+    font-size: 24px;
+    font-weight: 600;
+    padding: 20px 30px;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  }
+  
+  .hidden {
+    display: none;
+  }
+  
