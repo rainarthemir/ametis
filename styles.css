@@ -50,7 +50,7 @@ html, body, #map {
   color: #333;
   text-shadow: 0 0 3px white;
   white-space: nowrap;
-  transform: translate(15px, -12px);
+  transform: translate(25px, -20px);
 }
 
 /* Мигающая остановка */
