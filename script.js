@@ -9,6 +9,7 @@ let stopLayer = L.layerGroup().addTo(map);
 let stopBlinkTimers = [];
 let currentRouteId = null;
 let currentTripId = null;
+let allTripUpdates = {};
 
 const stops = {};
 const trips = {};
@@ -106,23 +107,69 @@ function drawTripStops(tripId, nextStopId) {
       else if (idx === nextIdx) fill = "yellow";
       else fill = "white";
     }
+
     const circle = L.circleMarker([st.lat, st.lon], {
       radius: 6.5, color: "black", weight: 1,
-      fillColor: fill, fillOpacity: 1
+      fillColor: fill, fillOpacity: 1,
+      stopIndex: idx
     }).addTo(stopLayer);
+
     const label = L.marker([st.lat, st.lon], {
-      icon: L.divIcon({ className: "stop-label", html: st.name, iconSize: null })
+      icon: L.divIcon({ className: "stop-label", html: st.name, iconSize: null }),
+      stopIndex: idx
     }).addTo(stopLayer);
-    if (idx === nextIdx) {
-      let isYellow = true;
-      const timer = setInterval(()=>{
-        isYellow = !isYellow;
-        circle.setStyle({ fillColor: isYellow ? "yellow" : "white" });
-      }, 700);
-      stopBlinkTimers.push(timer);
+  });
+
+  // сразу обновляем отображение подписей по зуму
+  updateStopLabelsVisibility();
+}
+
+/* ===== Показ подписей по зуму ===== */
+const MIN_ZOOM_LABELS = 15;
+function updateStopLabelsVisibility() {
+  const zoom = map.getZoom();
+  stopLayer.eachLayer(layer => {
+    if (layer instanceof L.Marker && layer.getElement()) {
+      const idx = layer.options.stopIndex;
+      if (idx === 0 || idx === stopTimes[currentTripId]?.length-1) {
+        layer.getElement().style.display = "block";
+      } else {
+        layer.getElement().style.display = zoom >= MIN_ZOOM_LABELS ? "block" : "none";
+      }
     }
   });
 }
+map.on("zoomend", updateStopLabelsVisibility);
+
+/* ===== Автообновление мигания ===== */
+function updateBlinkingStop() {
+  if (!currentTripId || !stopTimesIndexed) return;
+  const list = stopTimes[currentTripId];
+  if (!list || !list.length) return;
+
+  let nextIdx = -1;
+  const now = nowMs();
+  const tu = allTripUpdates[currentTripId];
+  if (tu?.stopTimeUpdate?.length) {
+    const future = tu.stopTimeUpdate.find(s=>s.arrival?.time*1000 > now);
+    const next = future || tu.stopTimeUpdate[tu.stopTimeUpdate.length - 1];
+    if (next) nextIdx = list.findIndex(s=>s.stop_id===next.stopId);
+  }
+
+  stopLayer.eachLayer(layer => {
+    if (!(layer instanceof L.CircleMarker)) return;
+    const stopIdx = layer.options.stopIndex;
+    if (stopIdx === nextIdx) {
+      layer._blinking = true;
+      layer.getElement()?.classList.add("blinking");
+    } else {
+      layer._blinking = false;
+      layer.getElement()?.classList.remove("blinking");
+      layer.setStyle({ fillColor: stopIdx < nextIdx ? "#ccc" : "white" });
+    }
+  });
+}
+setInterval(updateBlinkingStop, 1000);
 
 /* ===== Транспорт ===== */
 async function loadVehicles() {
@@ -132,14 +179,14 @@ async function loadVehicles() {
       fetchFeed("https://proxy.transport.data.gouv.fr/resource/ametis-amiens-gtfs-rt-trip-update")
     ]);
 
-    const tripUpdates = {};
+    allTripUpdates = {};
     tripFeed.entity.forEach(e=>{
       const tid = e.tripUpdate?.trip?.tripId;
-      if (tid) tripUpdates[tid] = e.tripUpdate;
+      if (tid) allTripUpdates[tid] = e.tripUpdate;
     });
 
     allVehicles = posFeed.entity.filter(e=>e.vehicle && e.vehicle.position);
-    updateVisibleVehicles(tripUpdates);
+    updateVisibleVehicles(allTripUpdates);
   } catch(err) {
     console.error("Ошибка RT:", err);
   }
@@ -204,14 +251,12 @@ function updateVisibleVehicles(tripUpdates) {
         map.fitBounds(currentShapeLayer.getBounds());
       }
       if (nextStopId) drawTripStops(tripId, nextStopId);
-      updateVisibleVehicles(tripUpdates); // фильтруем остальных
+      updateVisibleVehicles(tripUpdates);
       marker.openPopup();
     });
 
     markers.push(marker);
   });
-
-  console.log("🚍 Отображено:", markers.length, "машин", currentRouteId ? "(фильтр активен)" : "");
 }
 
 /* ===== Кнопка "Показать всё" ===== */
@@ -220,7 +265,7 @@ document.getElementById("resetViewBtn").addEventListener("click", ()=>{
   currentTripId = null;
   if (currentShapeLayer) map.removeLayer(currentShapeLayer);
   clearStopLayer();
-  updateVisibleVehicles();
+  updateVisibleVehicles(allTripUpdates);
 });
 
 /* ===== Инициализация ===== */
