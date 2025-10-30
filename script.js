@@ -6,7 +6,6 @@ let markers = [];
 let allVehicles = [];
 let currentShapeLayer = null;
 let stopLayer = L.layerGroup().addTo(map);
-let stopBlinkTimers = [];
 let currentRouteId = null;
 let currentTripId = null;
 let allTripUpdates = {};
@@ -37,8 +36,6 @@ function normalizeShort(name) {
   return String(name).toLowerCase().trim().replace(/[^a-z0-9]/g,"");
 }
 function clearStopLayer() {
-  stopBlinkTimers.forEach(id => clearInterval(id));
-  stopBlinkTimers = [];
   stopLayer.clearLayers();
 }
 
@@ -90,17 +87,19 @@ async function fetchFeed(url) {
   return FeedMessage.decode(new Uint8Array(buf));
 }
 
-/* ===== Остановки ===== */
+/* ===== Отображение остановок ===== */
 function drawTripStops(tripId, nextStopId) {
   if (!stopTimesIndexed) return;
   const list = stopTimes[tripId];
   if (!list || !list.length) return;
   clearStopLayer();
+
   const nextIdx = nextStopId ? list.findIndex(s => s.stop_id === nextStopId) : -1;
 
   list.forEach((s, idx) => {
     const st = stops[s.stop_id];
     if (!st) return;
+
     let fill = "white";
     if (nextIdx >= 0) {
       if (idx < nextIdx) fill = "#ccc";
@@ -108,10 +107,10 @@ function drawTripStops(tripId, nextStopId) {
       else fill = "white";
     }
 
-    const circleRadius = 6.5; // радиус круга
-    const extraOffset = 12;   // дополнительное смещение для текста
-    const labelOffsetX = circleRadius + extraOffset; // сдвиг вправо
-    const labelOffsetY = -(circleRadius + extraOffset); // сдвиг вверх
+    const circleRadius = 6.5;
+    const extraOffset = 20; // увеличенное смещение
+    const labelOffsetX = circleRadius + extraOffset;
+    const labelOffsetY = -(circleRadius + extraOffset);
 
     const circle = L.circleMarker([st.lat, st.lon], {
       radius: circleRadius,
@@ -127,14 +126,13 @@ function drawTripStops(tripId, nextStopId) {
       stopIndex: idx
     }).addTo(stopLayer);
 
-    // Подвинем подпись динамически
+    // смещаем подпись
     const el = label.getElement();
     if (el) el.style.transform = `translate(${labelOffsetX}px, ${labelOffsetY}px)`;
   });
 
   updateStopLabelsVisibility();
 }
-
 
 /* ===== Показ подписей по зуму ===== */
 const MIN_ZOOM_LABELS = 15;
@@ -263,7 +261,7 @@ function updateVisibleVehicles(tripUpdates) {
         map.fitBounds(currentShapeLayer.getBounds());
       }
       if (nextStopId) drawTripStops(tripId, nextStopId);
-      updateVisibleVehicles(tripUpdates);
+      updateVisibleVehicles(tripUpdates); 
       marker.openPopup();
     });
 
