@@ -50,16 +50,16 @@ html, body, #map {
   color: #333;
   text-shadow: 0 0 3px white;
   white-space: nowrap;
-  transform: translate(25px, -20px);
+  pointer-events: none;
 }
 
 /* Мигающая остановка */
+.blinking {
+  animation: blinkYellow 0.7s infinite;
+}
 @keyframes blinkYellow {
   0%, 100% { fill: yellow; }
   50% { fill: white; }
-}
-.blinking {
-  animation: blinkYellow 1s infinite;
 }
 
 /* --- Кнопка "Показать всё" --- */
@@ -100,8 +100,7 @@ html, body, #map {
   }
 
   .stop-label {
-    font-size: 12px;
-    transform: translate(18px, -14px);
+    font-size: 13px;
   }
 
   .leaflet-popup-content {
