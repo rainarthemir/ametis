@@ -108,9 +108,17 @@ function drawTripStops(tripId, nextStopId) {
       else fill = "white";
     }
 
+    const circleRadius = 6.5; // радиус круга
+    const extraOffset = 12;   // дополнительное смещение для текста
+    const labelOffsetX = circleRadius + extraOffset; // сдвиг вправо
+    const labelOffsetY = -(circleRadius + extraOffset); // сдвиг вверх
+
     const circle = L.circleMarker([st.lat, st.lon], {
-      radius: 6.5, color: "black", weight: 1,
-      fillColor: fill, fillOpacity: 1,
+      radius: circleRadius,
+      color: "black",
+      weight: 1,
+      fillColor: fill,
+      fillOpacity: 1,
       stopIndex: idx
     }).addTo(stopLayer);
 
@@ -118,11 +126,15 @@ function drawTripStops(tripId, nextStopId) {
       icon: L.divIcon({ className: "stop-label", html: st.name, iconSize: null }),
       stopIndex: idx
     }).addTo(stopLayer);
+
+    // Подвинем подпись динамически
+    const el = label.getElement();
+    if (el) el.style.transform = `translate(${labelOffsetX}px, ${labelOffsetY}px)`;
   });
 
-  // сразу обновляем отображение подписей по зуму
   updateStopLabelsVisibility();
 }
+
 
 /* ===== Показ подписей по зуму ===== */
 const MIN_ZOOM_LABELS = 15;
