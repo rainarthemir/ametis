@@ -280,155 +280,70 @@ async function collectDepartures(stopId, routeShortName) {
   return uniqueDeps;
 }
 
-// ---------- Получение алертов с сайта Ametis ----------
+// ---------- Получение алертов через Cloudflare Worker ----------
 async function loadAlertsFromWebsite() {
   try {
-    console.log("🌐 Загрузка алертов с сайта Ametis...");
+    console.log("🌐 Загрузка алертов через Cloudflare Worker...");
     
-    // Пробуем разные CORS proxy
-    const proxies = [
-      `https://api.allorigins.win/raw?url=${encodeURIComponent('https://www.plan.ametis.fr/fr/traffic-infos')}`,
-      `https://corsproxy.io/?${encodeURIComponent('https://www.plan.ametis.fr/fr/traffic-infos')}`,
-      `https://proxy.cors.sh/${encodeURIComponent('https://www.plan.ametis.fr/fr/traffic-infos')}`,
-      'https://www.plan.ametis.fr/fr/traffic-infos' // Прямой запрос (может не работать из-за CORS)
-    ];
-    
-    let response = null;
-    let lastError = null;
-    
-    // Пробуем каждый proxy по очереди
-    for (const proxyUrl of proxies) {
-      try {
-        console.log(`🔄 Пробуем proxy: ${proxyUrl.substring(0, 50)}...`);
-        response = await fetch(proxyUrl, {
-          method: 'GET',
-          headers: {
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-          }
-        });
-        
-        if (response.ok) {
-          console.log(`✅ Proxy успешен: ${proxyUrl.substring(0, 50)}...`);
-          break;
-        } else {
-          console.warn(`❌ Proxy не сработал: ${response.status}`);
-          lastError = new Error(`HTTP ${response.status}`);
-        }
-      } catch (error) {
-        console.warn(`❌ Ошибка proxy: ${error.message}`);
-        lastError = error;
-        continue;
+    const response = await fetch('https://ametisfr.dmytrothemir.workers.dev/', {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache'
       }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
     
-    if (!response || !response.ok) {
-      throw lastError || new Error('Все proxy не сработали');
-    }
-
-    const html = await response.text();
+    const alertsData = await response.json();
     
-    // Проверяем, что получили HTML, а не ошибку
-    if (!html || html.includes('error') || html.length < 100) {
-      throw new Error('Неверный HTML ответ');
-    }
-    
-    // Создаем временный DOM для парсинга
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
-    
-    const alertsData = { 'en_cours': [], 'a_venir': [] };
-    
-    // Упрощенный парсинг - ищем любые элементы с алертами
-    const alertElements = doc.querySelectorAll('[class*="alert"], [class*="Alert"], [class*="disruption"], [class*="Disruption"]');
-    
-    console.log(`🔍 Найдено элементов алертов: ${alertElements.length}`);
-    
-    // Если нашли элементы алертов, пробуем извлечь текст
-    if (alertElements.length > 0) {
-      alertElements.forEach((element, index) => {
-        try {
-          const text = element.textContent.trim();
-          if (text && text.length > 10 && !text.includes('JavaScript') && !text.includes('cookie')) {
-            // Определяем тип алерта по контексту
-            const isToCome = text.toLowerCase().includes('venir') || 
-                            text.toLowerCase().includes('prévu') ||
-                            element.closest('[id*="ToCome"], [class*="ToCome"]');
-            
-            if (isToCome) {
-              alertsData.a_venir.push({
-                line_id: null,
-                line_number: null,
-                mode: null,
-                direction: null,
-                message: text.substring(0, 200) // Ограничиваем длину
-              });
-            } else {
-              alertsData.en_cours.push({
-                line_id: null,
-                line_number: null,
-                mode: null,
-                direction: null,
-                message: text.substring(0, 200)
-              });
-            }
-          }
-        } catch (error) {
-          console.warn(`Ошибка обработки элемента алерта ${index}:`, error);
-        }
-      });
-    }
-    
-    // Если не нашли алертов через парсинг, используем fallback сообщения
-    if (alertsData.en_cours.length === 0 && alertsData.a_venir.length === 0) {
-      console.log("ℹ️ Алерты не найдены через парсинг, используем fallback");
-      // Можно добавить тестовые алерты для демонстрации
-      alertsData.en_cours.push({
-        line_id: 'line:AMI:T1-1',
-        line_number: 'T1',
-        mode: 'TRAM',
-        direction: 'OUTWARD',
-        message: 'Trafic normal sur toutes les lignes'
-      });
-    }
-    
-    console.log("✅ Алерты обработаны:", {
-      en_cours: alertsData.en_cours.length,
-      a_venir: alertsData.a_venir.length
+    console.log("✅ Алерты получены через Worker:", {
+      en_cours: alertsData.en_cours?.length || 0,
+      a_venir: alertsData.a_venir?.length || 0
     });
     
     return alertsData;
     
   } catch (error) {
-    console.error("❌ Ошибка загрузки алертов с сайта:", error);
-    // Возвращаем пустые алерты вместо выброса ошибки
-    return { 'en_cours': [], 'a_venir': [] };
+    console.error("❌ Ошибка загрузки алертов через Worker:", error);
+    // Возвращаем структуру по умолчанию при ошибке
+    return { 
+      'en_cours': [], 
+      'a_venir': [] 
+    };
   }
 }
 
 // ---------- Обновленная функция загрузки алертов ----------
 async function loadAlerts() {
   try {
-    // Сначала пробуем загрузить с сайта Ametis
+    // Загружаем через Cloudflare Worker
     const websiteAlerts = await loadAlertsFromWebsite();
     
     // Форматируем алерты для отображения
     const displayAlerts = [];
     
-    // Добавляем текущие алерты
-    if (websiteAlerts.en_cours.length > 0) {
+    // Добавляем текущие алерты (en_cours)
+    if (websiteAlerts.en_cours && websiteAlerts.en_cours.length > 0) {
       websiteAlerts.en_cours.forEach(alert => {
-        const lineInfo = alert.line_number ? `Ligne ${alert.line_number} - ` : '';
-        const message = alert.message || 'Information trafic';
-        displayAlerts.push(`${lineInfo}${message}`);
+        if (alert.message && alert.message.trim()) {
+          const lineInfo = alert.line_number ? `Ligne ${alert.line_number} - ` : '';
+          // Заменяем переносы строк на пробелы для лучшего отображения
+          const cleanMessage = alert.message.replace(/\n/g, ' ').trim();
+          displayAlerts.push(`${lineInfo}${cleanMessage}`);
+        }
       });
     }
     
-    // Добавляем предстоящие алерты
-    if (websiteAlerts.a_venir.length > 0) {
+    // Добавляем предстоящие алерты (a_venir)
+    if (websiteAlerts.a_venir && websiteAlerts.a_venir.length > 0) {
       websiteAlerts.a_venir.forEach(alert => {
-        const message = alert.message || 'Travaux à venir';
-        displayAlerts.push(`[À venir] ${message}`);
+        if (alert.message && alert.message.trim()) {
+          const cleanMessage = alert.message.replace(/\n/g, ' ').trim();
+          displayAlerts.push(`[À venir] ${cleanMessage}`);
+        }
       });
     }
     
@@ -437,8 +352,16 @@ async function loadAlerts() {
       return ["Trafic normal sur toutes les lignes"];
     }
     
-    console.log("🔔 Алерты для отображения:", displayAlerts);
-    return displayAlerts;
+    // Ограничиваем длину сообщений для лучшего отображения
+    const formattedAlerts = displayAlerts.map(alert => {
+      if (alert.length > 200) {
+        return alert.substring(0, 197) + '...';
+      }
+      return alert;
+    });
+    
+    console.log("🔔 Алерты для отображения:", formattedAlerts);
+    return formattedAlerts;
     
   } catch (error) {
     console.warn("⚠️ Ошибка загрузки алертов:", error);
