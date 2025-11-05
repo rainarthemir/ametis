@@ -376,8 +376,8 @@ function updateClockUI() {
 // ---------- Основная функция обновления ----------
 async function refreshBoard() {
   const params = new URLSearchParams(location.search);
-  const stopParam = params.get("stop") || params.get("id") || "Gare d'Amiens";
-  const lineParam = params.get("line") || params.get("route") || "T1";
+  const stopParam = params.get("stop") || params.get("id");
+  const lineParam = params.get("line") || params.get("route");
   
   console.log("🔄 Actualisation du tableau:", { stopParam, lineParam });
   
