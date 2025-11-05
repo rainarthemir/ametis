@@ -106,6 +106,7 @@ html, body {
   font-size: 64px;
   font-weight: 800;
   border-radius: 8px;
+  transition: background-color 0.3s ease;
 }
 
 .time-small {
@@ -124,6 +125,7 @@ html, body {
   flex: 1;
   display: flex;
   align-items: center;
+  min-height: 60px;
 }
 
 .alert-text {
@@ -165,6 +167,13 @@ html, body {
 /* Animation for soon arrivals */
 .time-big.soon {
   background: var(--metro-red);
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0% { background-color: var(--metro-red); }
+  50% { background-color: #ff4444; }
+  100% { background-color: var(--metro-red); }
 }
 
 /* Mobile responsiveness */
@@ -188,6 +197,10 @@ html, body {
     height: 50px;
     font-size: 20px;
   }
+  
+  .alert-text {
+    font-size: 14px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -206,4 +219,32 @@ html, body {
     height: 80px;
     font-size: 36px;
   }
+  
+  .direction-title {
+    font-size: 18px;
+  }
+  
+  .clock {
+    font-size: 22px;
+  }
+  
+  .alert-text {
+    font-size: 13px;
+  }
+}
+
+/* Loading state */
+.time-big:empty::before {
+  content: "--";
+}
+
+/* Hidden elements for alerts parsing */
+.hidden-frame {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  border: none;
+  opacity: 0;
+  pointer-events: none;
 }
