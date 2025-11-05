@@ -338,6 +338,7 @@ async function loadAlertsFromWebsite() {
 }
 
 // ---------- Получение цвета линии из GTFS2 ----------
+// ---------- Получение цвета линии из GTFS2 ----------
 function getLineColor(lineNumber) {
   if (!lineNumber) return '#666666'; // Серый по умолчанию
   
@@ -345,14 +346,6 @@ function getLineColor(lineNumber) {
   if (lineData && lineData.route_color) {
     return '#' + lineData.route_color;
   }
-  
-  // Цвета по умолчанию для разных типов линий
-  const defaultColors = {
-    'T1': '#0066CC', 'T2': '#0066CC', // Трамваи - синий
-    'N1': '#993399', 'N2': '#993399', // Ночные - фиолетовый
-    '1': '#FF0000', '2': '#0066CC', '3': '#009900', '4': '#FF6600', '5': '#990099',
-    '6': '#66CC00', '7': '#FFCC00', '8': '#CC0066', '9': '#996633', '10': '#0099CC'
-  };
   
   return defaultColors[lineNumber] || '#666666';
 }
@@ -581,15 +574,19 @@ function renderBoard(deps, alerts, routeShortName, stopName) {
     lineBadge.textContent = routeShortName;
     const lineColor = getLineColor(routeShortName);
     lineBadge.style.background = lineColor;
-    
-    // Определяем цвет текста в зависимости от яркости фона
-    const hex = lineColor.replace('#', '');
-    const r = parseInt(hex.substr(0, 2), 16);
-    const g = parseInt(hex.substr(2, 2), 16);
-    const b = parseInt(hex.substr(4, 2), 16);
-    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-    lineBadge.style.color = brightness > 128 ? '#000' : '#fff';
-  }
+  
+  // УДАЛИТЬ этот блок - всегда используем белый текст
+  // Определяем цвет текста в зависимости от яркости фона
+  // const hex = lineColor.replace('#', '');
+  // const r = parseInt(hex.substr(0, 2), 16);
+  // const g = parseInt(hex.substr(2, 2), 16);
+  // const b = parseInt(hex.substr(4, 2), 16);
+  // const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+  // lineBadge.style.color = brightness > 128 ? '#000' : '#fff';
+  
+  // ВМЕСТО этого просто установите белый цвет
+  lineBadge.style.color = '#fff';
+}
 
   const now = Math.floor(Date.now() / 1000);
   
