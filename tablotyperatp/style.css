@@ -63,9 +63,6 @@ html, body {
   flex: 1;
 }
 
-.time-big {
-    font-size: 100px; /* Было 80px */
-  }
 
 .clock {
   font-size: 28px;
@@ -125,10 +122,11 @@ html, body {
 }
 
 .time-big {
-  font-size: 120px;
+  font-size: 140px;
   font-weight: 800;
   line-height: 1;
   transition: color 0.3s ease;
+  color: #FFD700 !important;
 }
 
 /* Remove soon class styles since we don't want red color anymore */
