@@ -34,92 +34,11 @@ html, body {
 /* Header */
 .header {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
   align-items: center;
   padding: 20px;
   height: 15vh;
   border-bottom: 2px solid #eee;
-}
-
-.direction-title {
-  font-size: 36px;
-  font-weight: 700;
-  color: var(--black);
-  text-align: center;
-}
-
-/* Main content */
-.main-content {
-  display: flex;
-  flex: 1;
-  height: 75vh;
-}
-
-/* Departures section - left half */
-.departures-section {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  padding: 20px;
-  border-right: 2px solid #eee;
-}
-
-.departures {
-  display: flex;
-  flex-direction: column;
-  gap: 40px;
-  width: 100%;
-  max-width: 300px;
-}
-
-.departure-block {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 15px;
-}
-
-.departure-label {
-  font-size: 24px;
-  color: var(--muted);
-  font-weight: 500;
-}
-
-.time-big {
-  width: 180px;
-  height: 180px;
-  background: var(--black);
-  color: var(--white);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 80px;
-  font-weight: 800;
-  border-radius: 8px;
-  transition: background-color 0.3s ease;
-}
-
-.time-small {
-  font-size: 24px;
-  color: var(--muted);
-  font-weight: 500;
-}
-
-/* Traffic section - right half */
-.traffic-section {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  padding: 20px;
-}
-
-.traffic-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
 }
 
 .line-badge {
@@ -134,21 +53,92 @@ html, body {
   color: #fff;
   background: var(--metro-yellow);
   box-shadow: inset 0 -4px 0 rgba(0,0,0,0.2);
-  transition: all 0.3s ease;
+}
+
+.direction-title {
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--black);
+  text-align: center;
+  flex: 1;
 }
 
 .clock {
   font-size: 28px;
   font-weight: 300;
   color: var(--black);
+  width: 80px;
 }
 
-/* Traffic info - улучшенная версия */
+/* Main content */
+.main-content {
+  display: flex;
+  flex: 1;
+  height: 75vh;
+}
+
+/* Departures - merged black section on left */
+.departures {
+  flex: 0 0 50%;
+  display: flex;
+  background: var(--black);
+  color: var(--white);
+}
+
+.departure-block {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+  position: relative;
+}
+
+/* Add separator between departure blocks */
+.departure-block:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 20%;
+  bottom: 20%;
+  width: 2px;
+  background: rgba(255,255,255,0.3);
+}
+
+.departure-label {
+  font-size: 24px;
+  color: var(--white);
+  font-weight: 500;
+  margin-bottom: 20px;
+}
+
+.time-big {
+  font-size: 120px;
+  font-weight: 800;
+  line-height: 1;
+  transition: color 0.3s ease;
+}
+
+/* Remove soon class styles since we don't want red color anymore */
+.time-big.soon {
+  /* No special styling - keep it white */
+}
+
+/* Traffic section - right half */
+.traffic-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 30px;
+}
+
+/* Traffic info */
 .traffic-info {
   background: var(--white);
   border: 2px solid #ddd;
   border-radius: 12px;
-  padding: 20px;
+  padding: 25px;
   flex: 1;
   display: flex;
   align-items: flex-start;
@@ -157,11 +147,11 @@ html, body {
   line-height: 1.5;
 }
 
-/* Бейдж линии в правом верхнем углу */
+/* Бейдж линии в левом верхнем углу алерта */
 .alert-line-badge {
   position: absolute;
   top: 15px;
-  left: 15px; /* Изменено с right на left */
+  left: 15px;
   width: 40px;
   height: 40px;
   border-radius: 8px;
@@ -192,7 +182,7 @@ html, body {
   font-size: 16px;
   color: #555;
   line-height: 1.4;
-  white-space: pre-line; /* Сохраняем переносы строк */
+  white-space: pre-line;
 }
 
 /* Сообщение о нормальном трафике */
@@ -258,18 +248,7 @@ html, body {
 .line-T2 { background: #006cb8 !important; color: white !important; }
 .line-BUS { background: #6e6e6e !important; color: white !important; }
 
-/* Animation for soon arrivals */
-.time-big.soon {
-  background: var(--metro-red);
-  animation: pulse 1s infinite;
-}
-
-@keyframes pulse {
-  0% { background-color: var(--metro-red); }
-  50% { background-color: #ff4444; }
-  100% { background-color: var(--metro-red); }
-}
-
+/* Remove pulse animation since we don't want red color */
 /* Status */
 .status {
   height: 10vh;
@@ -291,20 +270,22 @@ html, body {
     flex-direction: column;
   }
   
-  .departures-section {
-    border-right: none;
-    border-bottom: 2px solid #eee;
-    height: 50%;
+  .departures {
+    flex: 0 0 40%;
+    flex-direction: column;
   }
   
-  .traffic-section {
-    height: 50%;
+  .departure-block:not(:last-child)::after {
+    right: 20%;
+    left: 20%;
+    top: auto;
+    bottom: 0;
+    width: auto;
+    height: 2px;
   }
   
   .time-big {
-    width: 140px;
-    height: 140px;
-    font-size: 60px;
+    font-size: 80px;
   }
   
   .direction-title {
@@ -317,12 +298,8 @@ html, body {
     font-size: 22px;
   }
   
-  .alert-text {
-    font-size: 14px;
-  }
-  
   .traffic-info {
-    padding: 15px;
+    padding: 20px;
     font-size: 16px;
   }
   
@@ -330,8 +307,6 @@ html, body {
     width: 35px;
     height: 35px;
     font-size: 16px;
-    top: 12px;
-    left: 12px;
   }
   
   .alert-title {
@@ -352,34 +327,35 @@ html, body {
 }
 
 @media (max-width: 480px) {
-  .ratp-board {
-    padding: 0;
-  }
-  
-  .departures {
-    gap: 20px;
+  .header {
+    padding: 15px;
   }
   
   .time-big {
-    width: 120px;
-    height: 120px;
-    font-size: 50px;
+    font-size: 60px;
   }
   
   .direction-title {
     font-size: 22px;
   }
   
-  .clock {
-    font-size: 22px;
+  .line-badge {
+    width: 50px;
+    height: 50px;
+    font-size: 20px;
   }
   
-  .alert-text {
-    font-size: 13px;
+  .clock {
+    font-size: 20px;
+    width: 60px;
+  }
+  
+  .departure-label {
+    font-size: 20px;
   }
   
   .traffic-info {
-    padding: 12px;
+    padding: 15px;
     font-size: 15px;
   }
   
