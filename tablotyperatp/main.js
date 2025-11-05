@@ -280,58 +280,186 @@ async function collectDepartures(stopId, routeShortName) {
   return uniqueDeps;
 }
 
-// ---------- Загрузка alerts ----------
+// ---------- Получение алертов с сайта Ametis ----------
+async function loadAlertsFromWebsite() {
+  try {
+    console.log("🌐 Загрузка алертов с сайта Ametis...");
+    
+    // Используем fetch для получения HTML
+    const response = await fetch('https://www.plan.ametis.fr/fr/traffic-infos', {
+      mode: 'no-cors'
+    }).catch(async () => {
+      // Если no-cors не работает, пробуем через proxy
+      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent('https://www.plan.ametis.fr/fr/traffic-infos')}`;
+      return await fetch(proxyUrl);
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const html = await response.text();
+    
+    // Создаем временный DOM для парсинга
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    
+    const alertsData = { 'en_cours': [], 'a_venir': [] };
+    
+    // Обрабатываем текущие алерты (en cours)
+    const modalElements = doc.querySelectorAll('[class*="modal"], [id*="Modal"]');
+    modalElements.forEach(modal => {
+      try {
+        const modalId = modal.id;
+        if (!modalId) return;
+        
+        // Ищем заголовок и контент
+        const titleElement = modal.querySelector('[class*="title"], [class*="Title"]');
+        const contentElement = modal.querySelector('[class*="content"], [class*="Content"]');
+        
+        if (!titleElement || !contentElement) return;
+        
+        const title = titleElement.textContent.trim();
+        const paragraphs = contentElement.querySelectorAll('p');
+        
+        // Фильтруем и собираем полный текст
+        const fullMessage = [];
+        paragraphs.forEach(p => {
+          let text = p.textContent.trim();
+          if (text.startsWith("Mise à jour")) return;
+          if (text.includes("Pour tous les détails")) {
+            text = text.replace("ici", "sur ametis.fr");
+          }
+          if (text) {
+            fullMessage.push(text);
+          }
+        });
+        
+        const message = fullMessage.join("\n");
+        
+        // Ищем связанную ссылку
+        const link = doc.querySelector(`a[data-target="#${modalId}"], [data-target="#${modalId}"]`);
+        let mode = "BUS";
+        let direction = "OUTWARD";
+        let lineNumber = modalId.split("-")[2] || "Unknown";
+        
+        if (link) {
+          mode = link.getAttribute("data-mode-text") || mode;
+          direction = link.getAttribute("data-direction") || direction;
+          lineNumber = link.getAttribute("data-line-short-name") || lineNumber;
+        }
+        
+        const lineId = `line:AMI:${lineNumber}-1`;
+        
+        alertsData.en_cours.push({
+          line_id: lineId,
+          line_number: lineNumber,
+          mode: mode,
+          direction: direction,
+          message: message,
+          title: title
+        });
+      } catch (error) {
+        console.warn("Ошибка обработки модального окна:", error);
+      }
+    });
+    
+    // Обработка "à venir"
+    const toComeElements = doc.querySelectorAll('[id*="ToCome"] [class*="alert"], [class*="ToCome"] [class*="alert"]');
+    toComeElements.forEach(div => {
+      alertsData.a_venir.push({
+        line_id: null,
+        line_number: null,
+        mode: null,
+        direction: null,
+        message: div.textContent.trim()
+      });
+    });
+    
+    console.log("✅ Алерты загружены с сайта:", alertsData);
+    return alertsData;
+    
+  } catch (error) {
+    console.error("❌ Ошибка загрузки алертов с сайта:", error);
+    return { 'en_cours': [], 'a_venir': [] };
+  }
+}
+
+// ---------- Обновленная функция загрузки алертов ----------
 async function loadAlerts() {
   try {
-    const feed = await fetchRTandDecode(RT_ALERT_URL);
-    const alerts = [];
+    // Сначала пробуем загрузить с сайта Ametis
+    const websiteAlerts = await loadAlertsFromWebsite();
     
-    console.log("🔔 Получены данные alerts:", feed);
+    // Форматируем алерты для отображения
+    const displayAlerts = [];
     
-    // Проверяем наличие entity с alert
-    if (feed.entity && Array.isArray(feed.entity)) {
-      for (const e of feed.entity) {
-        // Проверяем наличие alert в entity
-        if (e.alert) {
-          const alert = e.alert;
-          console.log("🔔 Alert найден:", alert);
-          
-          // Получаем текст алерта из различных возможных мест
-          let alertText = null;
-          
-          // Пробуем получить из header_text
-          if (alert.header_text && alert.header_text.translation) {
-            const translation = alert.header_text.translation.find(t => t.language === 'fr') || 
-                               alert.header_text.translation[0];
-            if (translation && translation.text) {
-              alertText = translation.text;
+    // Добавляем текущие алерты
+    if (websiteAlerts.en_cours.length > 0) {
+      websiteAlerts.en_cours.forEach(alert => {
+        const lineInfo = alert.line_number ? `Ligne ${alert.line_number} - ` : '';
+        displayAlerts.push(`${lineInfo}${alert.message}`);
+      });
+    }
+    
+    // Добавляем предстоящие алерты
+    if (websiteAlerts.a_venir.length > 0) {
+      websiteAlerts.a_venir.forEach(alert => {
+        displayAlerts.push(`[À venir] ${alert.message}`);
+      });
+    }
+    
+    // Если алертов нет, возвращаем стандартное сообщение
+    if (displayAlerts.length === 0) {
+      return ["Trafic normal sur toutes les lignes"];
+    }
+    
+    console.log("🔔 Алерты для отображения:", displayAlerts);
+    return displayAlerts;
+    
+  } catch (error) {
+    console.warn("⚠️ Ошибка загрузки алертов:", error);
+    
+    // Fallback: пробуем старый метод с GTFS-RT
+    try {
+      const feed = await fetchRTandDecode(RT_ALERT_URL);
+      const alerts = [];
+      
+      if (feed.entity && Array.isArray(feed.entity)) {
+        for (const e of feed.entity) {
+          if (e.alert) {
+            const alert = e.alert;
+            
+            let alertText = null;
+            
+            if (alert.header_text && alert.header_text.translation) {
+              const translation = alert.header_text.translation.find(t => t.language === 'fr') || 
+                                 alert.header_text.translation[0];
+              if (translation && translation.text) {
+                alertText = translation.text;
+              }
             }
-          }
-          
-          // Если не нашли в header_text, пробуем description_text
-          if (!alertText && alert.description_text && alert.description_text.translation) {
-            const translation = alert.description_text.translation.find(t => t.language === 'fr') || 
-                               alert.description_text.translation[0];
-            if (translation && translation.text) {
-              alertText = translation.text;
+            
+            if (!alertText && alert.description_text && alert.description_text.translation) {
+              const translation = alert.description_text.translation.find(t => t.language === 'fr') || 
+                                 alert.description_text.translation[0];
+              if (translation && translation.text) {
+                alertText = translation.text;
+              }
             }
-          }
-          
-          // Если нашли текст, добавляем в алерты
-          if (alertText) {
-            alerts.push(alertText);
-            console.log("🔔 Alert текст добавлен:", alertText);
+            
+            if (alertText) {
+              alerts.push(alertText);
+            }
           }
         }
       }
-    } else {
-      console.log("ℹ️ Нет entity в alerts feed или feed.entity не массив");
+      
+      return alerts.length > 0 ? alerts : ["Trafic normal sur toutes les lignes"];
+    } catch (rtError) {
+      console.warn("⚠️ Ошибка GTFS-RT алертов:", rtError);
+      return ["Information trafic temporairement indisponible"];
     }
-    
-    return alerts.length > 0 ? alerts : ["Trafic normal sur toutes les lignes"];
-  } catch (e) {
-    console.warn("⚠️ Alerts error:", e.message);
-    return ["Information trafic temporairement indisponible"];
   }
 }
 
