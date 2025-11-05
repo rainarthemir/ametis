@@ -571,6 +571,7 @@ function findStop(identifier) {
 }
 
 // ---------- Отрисовка табло ----------
+// ---------- Отрисовка табло ----------
 function renderBoard(deps, alerts, routeShortName, stopName) {
   console.log("🎨 Отрисовка табло:", { 
     отправлений: deps.length, 
@@ -584,18 +585,16 @@ function renderBoard(deps, alerts, routeShortName, stopName) {
     lineBadge.textContent = routeShortName;
     const lineColor = getLineColor(routeShortName);
     lineBadge.style.background = lineColor;
-    
-    // Всегда используем белый текст для бейджа линии
     lineBadge.style.color = '#fff';
   }
 
   const now = Math.floor(Date.now() / 1000);
   
-  // Фильтруем отправления: убираем дубликаты и нереальные времена
+  // Фильтруем отправления
   const nextDeps = deps
     .map(d => ({...d, minutes: minutesUntil(d.departureTime)}))
-    .filter(d => d.minutes !== null && d.minutes >= 0 && d.minutes <= 120) // Фильтруем реальные времена
-    .slice(0, 3); // Берем максимум 3 для отображения
+    .filter(d => d.minutes !== null && d.minutes >= 0 && d.minutes <= 120)
+    .slice(0, 2); // Берем только 2 отправления
 
   console.log("📊 Отфильтрованные отправления:", nextDeps);
 
@@ -609,22 +608,9 @@ function renderBoard(deps, alerts, routeShortName, stopName) {
         directionTitle.textContent = d.headsign || stopName || "Direction inconnue";
       }
       
-      // Следующее отправление той же линии (второе в списке)
-      if (firstTimeSmall && nextDeps[1]) {
-        firstTimeSmall.textContent = `| ${nextDeps[1].minutes}`;
-      } else if (firstTimeSmall) {
-        firstTimeSmall.textContent = "";
-      }
-
-      if (d.minutes <= 2) {
-        firstTimeBig.classList.add('soon');
-      } else {
-        firstTimeBig.classList.remove('soon');
-      }
+      // Убрали логику с добавлением класса 'soon' для красного цвета
     } else {
       firstTimeBig.textContent = "--";
-      if (firstTimeSmall) firstTimeSmall.textContent = "";
-      firstTimeBig.classList.remove('soon');
       if (directionTitle) directionTitle.textContent = stopName || "Aucun départ";
     }
   }
@@ -634,27 +620,22 @@ function renderBoard(deps, alerts, routeShortName, stopName) {
     if (nextDeps[1]) {
       const d = nextDeps[1];
       secondTimeBig.textContent = d.minutes === 0 ? "0" : `${d.minutes}`;
-      if (secondTimeSmall) secondTimeSmall.textContent = "";
       
-      if (d.minutes <= 2) {
-        secondTimeBig.classList.add('soon');
-      } else {
-        secondTimeBig.classList.remove('soon');
-      }
+      // Убрали логику с добавлением класса 'soon' для красного цвета
     } else {
       secondTimeBig.textContent = "--";
-      if (secondTimeSmall) secondTimeSmall.textContent = "";
-      secondTimeBig.classList.remove('soon');
     }
   }
+
+  // Убираем отображение второго времени (small time)
+  if (firstTimeSmall) firstTimeSmall.textContent = "";
+  if (secondTimeSmall) secondTimeSmall.textContent = "";
 
   // Alerts
   if (alertBox) {
     if (alerts && alerts.length > 0) {
-      // Запускаем карусель алертов
       startAlertCarousel(alerts);
     } else {
-      // Останавливаем карусель если она была запущена
       if (alertCarouselInterval) {
         clearInterval(alertCarouselInterval);
         alertCarouselInterval = null;
@@ -665,7 +646,6 @@ function renderBoard(deps, alerts, routeShortName, stopName) {
 
   logStatus();
 }
-
 // ---------- Обновление часов ----------
 function updateClockUI() {
   if (clock) {
