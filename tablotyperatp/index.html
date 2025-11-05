@@ -1,32 +1,53 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <title>Tableau RATP</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Tablo RATP - Ametis</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div id="board" class="ratp-board">
-    <div class="header">
-      <div class="line-badge" id="lineBadge">M1</div>
-      <div class="title" id="stopTitle">Château de Vincennes</div>
-      <div class="clock" id="clock">15:29</div>
-    </div>
-    <div class="times">
-      <div class="time-entry">
-        <span class="label">1er métro</span>
-        <span class="time" id="firstTime">--</span>
+    <header class="header">
+      <div class="left">
+        <div id="lineBadge" class="line-badge">M1</div>
+        <div id="lineInfo" class="line-info">
+          <div id="stopTitle" class="stop-title">—</div>
+          <div id="directionTitle" class="direction-title">—</div>
+        </div>
       </div>
-      <div class="time-entry">
-        <span class="label">2e métro</span>
-        <span class="time" id="secondTime">--</span>
+      <div class="right">
+        <div id="clock" class="clock">--:--</div>
       </div>
+    </header>
+
+    <main class="main-times">
+      <div class="arrival-column">
+        <div class="label">1er véhicule</div>
+        <div id="firstTimeBig" class="time-big">--</div>
+        <div id="firstTimeSmall" class="time-small">--</div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="arrival-column">
+        <div class="label">2e véhicule</div>
+        <div id="secondTimeBig" class="time-big">--</div>
+        <div id="secondTimeSmall" class="time-small">--</div>
+      </div>
+    </main>
+
+    <div id="panel" class="panel">
+      <div id="status" class="status">Загрузка...</div>
+      <div id="alertBox" class="alert"> </div>
     </div>
-    <div class="alert" id="alertBox"></div>
   </div>
 
-  <script src="../papaparse.min.js"></script>
-  <script src="../protobuf.min.js"></script>
+  <!-- external libs: PapaParse & protobufjs -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/protobufjs@7.2.3/dist/protobuf.min.js"></script>
+
+  <!-- main application script (включает твой код + UI адаптации) -->
   <script src="main.js"></script>
 </body>
 </html>
