@@ -31,14 +31,15 @@ let trips = [];
 let stopTimes = [];
 let calendar = [];
 let calendarDates = [];
-let mergedStops = {};
 let protoRoot = null;
 let currentStopId = null;
 
 // ---------- Утилиты ----------
 function logStatus(t) {
-  const now = new Date();
-  statusBox.textContent = `Actualisé à ${now.toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'})}`;
+  if (statusBox) {
+    const now = new Date();
+    statusBox.textContent = `Actualisé à ${now.toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'})}`;
+  }
 }
 
 function minutesUntil(ts) {
@@ -70,34 +71,39 @@ async function fetchRTandDecode(url) {
 
 // ---------- Загрузка GTFS ----------
 async function loadGTFS() {
-  const [stopsData, routesData, routes2Data, tripsData, stopTimesData, calendarData, calendarDatesData] = await Promise.all([
-    loadCSV(GTFS_BASE + "stops.txt"),
-    loadCSV(GTFS_BASE + "routes.txt"),
-    loadCSV(GTFS2_BASE + "routes.txt").catch(() => []),
-    loadCSV(GTFS_BASE + "trips.txt"),
-    loadCSV(GTFS_BASE + "stop_times.txt"),
-    loadCSV(GTFS_BASE + "calendar.txt").catch(() => []),
-    loadCSV(GTFS_BASE + "calendar_dates.txt").catch(() => [])
-  ]);
+  try {
+    const [stopsData, routesData, routes2Data, tripsData, stopTimesData, calendarData, calendarDatesData] = await Promise.all([
+      loadCSV(GTFS_BASE + "stops.txt"),
+      loadCSV(GTFS_BASE + "routes.txt"),
+      loadCSV(GTFS2_BASE + "routes.txt").catch(() => []),
+      loadCSV(GTFS_BASE + "trips.txt"),
+      loadCSV(GTFS_BASE + "stop_times.txt"),
+      loadCSV(GTFS_BASE + "calendar.txt").catch(() => []),
+      loadCSV(GTFS_BASE + "calendar_dates.txt").catch(() => [])
+    ]);
 
-  stops = stopsData;
-  routes = {};
-  for (const r of routesData) if (r.route_id) routes[r.route_id] = r;
-  
-  routes2ByShort = {};
-  for (const r of routes2Data) if (r.route_short_name) routes2ByShort[r.route_short_name] = r;
-  
-  trips = tripsData;
-  stopTimes = stopTimesData;
-  calendar = calendarData;
-  calendarDates = calendarDatesData;
+    stops = stopsData;
+    routes = {};
+    for (const r of routesData) if (r.route_id) routes[r.route_id] = r;
+    
+    routes2ByShort = {};
+    for (const r of routes2Data) if (r.route_short_name) routes2ByShort[r.route_short_name] = r;
+    
+    trips = tripsData;
+    stopTimes = stopTimesData;
+    calendar = calendarData;
+    calendarDates = calendarDatesData;
 
-  console.log("✅ GTFS загружен:", { 
-    stops: stops.length, 
-    routes: routesData.length,
-    trips: trips.length, 
-    stopTimes: stopTimes.length 
-  });
+    console.log("✅ GTFS загружен:", { 
+      stops: stops.length, 
+      routes: routesData.length,
+      trips: trips.length, 
+      stopTimes: stopTimes.length 
+    });
+  } catch (error) {
+    console.error("❌ Ошибка загрузки GTFS:", error);
+    throw error;
+  }
 }
 
 // ---------- Поиск активных сервисов ----------
@@ -223,35 +229,38 @@ async function loadAlerts() {
         const alert = e.alert;
         if (alert && alert.header_text) {
           // Берем французский перевод
-          const translation = alert.header_text.translation.find(t => t.language === 'fr') || 
-                             alert.header_text.translation[0];
-          if (translation) {
+          const translation = alert.header_text.translation?.find(t => t.language === 'fr') || 
+                             alert.header_text.translation?.[0];
+          if (translation && translation.text) {
             alerts.push(translation.text);
           }
         }
       }
     }
     
-    return alerts;
+    return alerts.length > 0 ? alerts : ["Trafic normal sur toutes les lignes"];
   } catch (e) {
     console.warn("⚠️ Alerts error:", e.message);
-    return [];
+    return ["Information trafic temporairement indisponible"];
   }
 }
 
 // ---------- Поиск остановки по имени ----------
 function findStopByName(stopName) {
+  if (!stopName) return null;
   const normalized = stopName.toLowerCase().trim();
   return stops.find(stop => 
-    stop.stop_name.toLowerCase().includes(normalized)
+    stop.stop_name && stop.stop_name.toLowerCase().includes(normalized)
   );
 }
 
 // ---------- Отрисовка табло ----------
 function renderBoard(deps, alerts, routeShortName, stopName) {
   // Устанавливаем номер линии и цвет
-  lineBadge.textContent = routeShortName;
-  lineBadge.className = `line-badge line-${routeShortName}`;
+  if (lineBadge) {
+    lineBadge.textContent = routeShortName;
+    lineBadge.className = `line-badge line-${routeShortName}`;
+  }
 
   const now = Math.floor(Date.now() / 1000);
   const nextDeps = deps
@@ -260,16 +269,19 @@ function renderBoard(deps, alerts, routeShortName, stopName) {
     .slice(0, 3);
 
   // Первое отправление
-  if (nextDeps[0]) {
+  if (firstTimeBig && nextDeps[0]) {
     const d = nextDeps[0];
     firstTimeBig.textContent = d.minutes === 0 ? "0" : `${d.minutes}`;
-    directionTitle.textContent = d.headsign || stopName || "Direction inconnue";
+    
+    if (directionTitle) {
+      directionTitle.textContent = d.headsign || stopName || "Direction inconnue";
+    }
     
     // Следующее отправление той же линии
     const nextSameLine = nextDeps[1];
-    if (nextSameLine) {
+    if (firstTimeSmall && nextSameLine) {
       firstTimeSmall.textContent = `| ${nextSameLine.minutes}`;
-    } else {
+    } else if (firstTimeSmall) {
       firstTimeSmall.textContent = "";
     }
 
@@ -278,35 +290,33 @@ function renderBoard(deps, alerts, routeShortName, stopName) {
     } else {
       firstTimeBig.classList.remove('soon');
     }
-  } else {
+  } else if (firstTimeBig) {
     firstTimeBig.textContent = "--";
-    firstTimeSmall.textContent = "";
+    if (firstTimeSmall) firstTimeSmall.textContent = "";
     firstTimeBig.classList.remove('soon');
-    directionTitle.textContent = stopName || "Aucun départ";
+    if (directionTitle) directionTitle.textContent = stopName || "Aucun départ";
   }
 
   // Второе отправление
-  if (nextDeps[1]) {
+  if (secondTimeBig && nextDeps[1]) {
     const d = nextDeps[1];
     secondTimeBig.textContent = d.minutes === 0 ? "0" : `${d.minutes}`;
-    secondTimeSmall.textContent = "";
+    if (secondTimeSmall) secondTimeSmall.textContent = "";
     
     if (d.minutes <= 2) {
       secondTimeBig.classList.add('soon');
     } else {
       secondTimeBig.classList.remove('soon');
     }
-  } else {
+  } else if (secondTimeBig) {
     secondTimeBig.textContent = "--";
-    secondTimeSmall.textContent = "";
+    if (secondTimeSmall) secondTimeSmall.textContent = "";
     secondTimeBig.classList.remove('soon');
   }
 
   // Alerts
-  if (alerts.length > 0) {
+  if (alertBox && alerts.length > 0) {
     alertBox.textContent = alerts[0];
-  } else {
-    alertBox.textContent = "Trafic normal sur toutes les lignes";
   }
 
   logStatus();
@@ -314,12 +324,14 @@ function renderBoard(deps, alerts, routeShortName, stopName) {
 
 // ---------- Обновление часов ----------
 function updateClockUI() {
-  const now = new Date();
-  clock.textContent = now.toLocaleTimeString('fr-FR', { 
-    hour: '2-digit', 
-    minute: '2-digit',
-    hour12: false 
-  });
+  if (clock) {
+    const now = new Date();
+    clock.textContent = now.toLocaleTimeString('fr-FR', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: false 
+    });
+  }
 }
 
 // ---------- Основная функция обновления ----------
@@ -333,6 +345,7 @@ async function refreshBoard() {
     const stop = findStopByName(stopParam);
     if (!stop) {
       console.error("Остановка не найдена:", stopParam);
+      if (alertBox) alertBox.textContent = `Arrêt "${stopParam}" non trouvé`;
       return;
     }
     
@@ -346,13 +359,15 @@ async function refreshBoard() {
     renderBoard(deps, alerts, lineParam, stop.stop_name);
   } catch (e) {
     console.error("Erreur:", e);
-    alertBox.textContent = "Erreur de chargement des données";
+    if (alertBox) alertBox.textContent = "Erreur de chargement des données";
   }
 }
 
 // ---------- Инициализация ----------
 async function init() {
   try {
+    console.log("🚀 Initialisation du tableau RATP...");
+    
     await loadGTFS();
     await loadProto();
     
@@ -367,11 +382,13 @@ async function init() {
     setInterval(() => {
       refreshBoard();
     }, REFRESH_INTERVAL_MS);
+    
+    console.log("✅ Tableau RATP initialisé");
   } catch (e) {
-    console.error("Erreur d'initialisation:", e);
-    alertBox.textContent = "Erreur d'initialisation";
+    console.error("❌ Erreur d'initialisation:", e);
+    if (alertBox) alertBox.textContent = "Erreur d'initialisation du système";
   }
 }
 
-// Запуск
-init();
+// Запуск при загрузке страницы
+document.addEventListener('DOMContentLoaded', init);
