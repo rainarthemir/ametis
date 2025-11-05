@@ -7,7 +7,7 @@ const GTFS_BASE = "../gtfs/";
 const GTFS2_BASE = "../gtfs2/";
 const PROTO_PATH = "../gtfs-realtime.proto";
 const RT_TRIP_URL = "https://proxy.transport.data.gouv.fr/resource/ametis-amiens-gtfs-rt-trip-update";
-const RT_ALERT_URL = "https://proxy.transport.data.gouv.fr/resource/ametis-amiens-gtfs-rt-alerts"; // Исправленная ссылка
+const RT_ALERT_URL = "https://proxy.transport.data.gouv.fr/resource/ametis-amiens-gtfs-rt-alerts";
 
 const DEFAULT_WINDOW_MIN = 120;
 const REFRESH_INTERVAL_MS = 20000;
@@ -135,7 +135,7 @@ async function collectDepartures(stopId, routeShortName) {
   const windowEnd = now + DEFAULT_WINDOW_MIN * 60;
   
   let deps = [];
-  const processedTrips = new Set(); // Для отслеживания уже обработанных рейсов
+  const processedTrips = new Set();
 
   // === RT данные ===
   try {
@@ -156,7 +156,6 @@ async function collectDepartures(stopId, routeShortName) {
         // Проверяем маршрут - ищем по route_id в routes
         const route = routes[routeId];
         if (!route) {
-          console.log("⚠️ Маршрут не найден в GTFS:", routeId);
           continue;
         }
         
@@ -177,13 +176,11 @@ async function collectDepartures(stopId, routeShortName) {
           // Находим trip для получения headsign
           const tripInfo = trips.find(t => t.trip_id === tripId);
           if (!tripInfo) {
-            console.log("⚠️ Trip не найден:", tripId);
             continue;
           }
 
           // Проверяем, не обрабатывали ли мы уже этот рейс
           if (processedTrips.has(tripId)) {
-            console.log("⚠️ Дубликат рейса в RT, пропускаем:", tripId);
             continue;
           }
 
@@ -197,14 +194,7 @@ async function collectDepartures(stopId, routeShortName) {
             source: "RT",
           });
           
-          processedTrips.add(tripId); // Помечаем рейс как обработанный
-          
-          console.log("✅ RT отправление:", { 
-            tripId, 
-            headsign: tripInfo.trip_headsign,
-            time: new Date(depTs * 1000).toLocaleTimeString(),
-            minutes: minutesUntil(depTs)
-          });
+          processedTrips.add(tripId);
         }
       }
     }
@@ -244,7 +234,6 @@ async function collectDepartures(stopId, routeShortName) {
     
     // Проверяем, нет ли уже этого trip в RT данных
     if (processedTrips.has(trip.trip_id)) {
-      console.log("ℹ️ Trip уже в RT, пропускаем в GTFS:", trip.trip_id);
       continue;
     }
 
@@ -264,27 +253,31 @@ async function collectDepartures(stopId, routeShortName) {
       source: "GTFS",
     });
     
-    processedTrips.add(trip.trip_id); // Помечаем рейс как обработанный
-    
-    console.log("✅ GTFS отправление:", { 
-      tripId: trip.trip_id,
-      headsign: trip.trip_headsign,
-      time: st.departure_time,
-      minutes: minutesUntil(departureTime)
-    });
+    processedTrips.add(trip.trip_id);
   }
 
-  // Сортируем по времени отправления
+  // Сортируем по времени отправления и убираем дубликаты по tripId
   deps.sort((a, b) => a.departureTime - b.departureTime);
   
-  console.log("📋 Все отправления:", deps.map(d => ({
+  // Дополнительная фильтрация дубликатов
+  const uniqueDeps = [];
+  const seenTripIds = new Set();
+  
+  for (const dep of deps) {
+    if (!seenTripIds.has(dep.tripId)) {
+      uniqueDeps.push(dep);
+      seenTripIds.add(dep.tripId);
+    }
+  }
+  
+  console.log("📋 Все отправления после фильтрации:", uniqueDeps.map(d => ({
     source: d.source,
     headsign: d.headsign,
     minutes: minutesUntil(d.departureTime),
     time: new Date(d.departureTime * 1000).toLocaleTimeString()
   })));
   
-  return deps;
+  return uniqueDeps;
 }
 
 // ---------- Загрузка alerts ----------
@@ -295,44 +288,44 @@ async function loadAlerts() {
     
     console.log("🔔 Получены данные alerts:", feed);
     
-    if (feed.entity) {
+    // Проверяем наличие entity с alert
+    if (feed.entity && Array.isArray(feed.entity)) {
       for (const e of feed.entity) {
-        const alert = e.alert;
-        if (alert) {
+        // Проверяем наличие alert в entity
+        if (e.alert) {
+          const alert = e.alert;
           console.log("🔔 Alert найден:", alert);
           
-          // Пробуем получить текст из header_text
-          if (alert.header_text) {
-            const translation = alert.header_text.translation?.find(t => t.language === 'fr') || 
-                               alert.header_text.translation?.[0];
+          // Получаем текст алерта из различных возможных мест
+          let alertText = null;
+          
+          // Пробуем получить из header_text
+          if (alert.header_text && alert.header_text.translation) {
+            const translation = alert.header_text.translation.find(t => t.language === 'fr') || 
+                               alert.header_text.translation[0];
             if (translation && translation.text) {
-              alerts.push(translation.text);
-              console.log("🔔 Alert text (header):", translation.text);
-              continue;
+              alertText = translation.text;
             }
           }
           
-          // Пробуем получить текст из description_text
-          if (alert.description_text) {
-            const translation = alert.description_text.translation?.find(t => t.language === 'fr') || 
-                               alert.description_text.translation?.[0];
+          // Если не нашли в header_text, пробуем description_text
+          if (!alertText && alert.description_text && alert.description_text.translation) {
+            const translation = alert.description_text.translation.find(t => t.language === 'fr') || 
+                               alert.description_text.translation[0];
             if (translation && translation.text) {
-              alerts.push(translation.text);
-              console.log("🔔 Alert text (description):", translation.text);
-              continue;
+              alertText = translation.text;
             }
           }
           
-          // Если есть просто текст без переводов
-          if (alert.header_text && typeof alert.header_text === 'string') {
-            alerts.push(alert.header_text);
-            console.log("🔔 Alert text (raw header):", alert.header_text);
-          } else if (alert.description_text && typeof alert.description_text === 'string') {
-            alerts.push(alert.description_text);
-            console.log("🔔 Alert text (raw description):", alert.description_text);
+          // Если нашли текст, добавляем в алерты
+          if (alertText) {
+            alerts.push(alertText);
+            console.log("🔔 Alert текст добавлен:", alertText);
           }
         }
       }
+    } else {
+      console.log("ℹ️ Нет entity в alerts feed или feed.entity не массив");
     }
     
     return alerts.length > 0 ? alerts : ["Trafic normal sur toutes les lignes"];
@@ -374,11 +367,6 @@ function findStop(identifier) {
   }
   
   console.log("❌ Остановка не найдена:", identifier);
-  console.log("📋 Доступные остановки:", stops.slice(0, 5).map(s => ({
-    id: s.stop_id,
-    code: s.stop_code,
-    name: s.stop_name
-  })));
   
   return null;
 }
@@ -401,34 +389,11 @@ function renderBoard(deps, alerts, routeShortName, stopName) {
   const now = Math.floor(Date.now() / 1000);
   
   // Фильтруем отправления: убираем дубликаты и нереальные времена
-  const uniqueDeps = [];
-  const seenTrips = new Set();
-  
-  for (const dep of deps) {
-    // Пропускаем дубликаты по trip_id
-    if (seenTrips.has(dep.tripId)) {
-      console.log("🚫 Пропускаем дубликат trip:", dep.tripId);
-      continue;
-    }
-    
-    const minutes = minutesUntil(dep.departureTime);
-    
-    // Пропускаем нереальные времена (больше 2 часов)
-    if (minutes === null || minutes > 120) {
-      console.log("🚫 Пропускаем нереальное время:", minutes, "минут");
-      continue;
-    }
-    
-    uniqueDeps.push({...dep, minutes});
-    seenTrips.add(dep.tripId);
-  }
-  
-  // Сортируем по времени
-  uniqueDeps.sort((a, b) => a.departureTime - b.departureTime);
-  
-  // Берем только первые 2 отправления для отображения
-  const nextDeps = uniqueDeps.slice(0, 2);
-  
+  const nextDeps = deps
+    .map(d => ({...d, minutes: minutesUntil(d.departureTime)}))
+    .filter(d => d.minutes !== null && d.minutes >= 0 && d.minutes <= 120) // Фильтруем реальные времена
+    .slice(0, 3); // Берем максимум 3 для отображения
+
   console.log("📊 Отфильтрованные отправления:", nextDeps);
 
   // Первое отправление
@@ -482,7 +447,7 @@ function renderBoard(deps, alerts, routeShortName, stopName) {
 
   // Alerts
   if (alertBox) {
-    if (alerts.length > 0) {
+    if (alerts.length > 0 && alerts[0] !== "Trafic normal sur toutes les lignes") {
       alertBox.textContent = alerts[0];
       console.log("🔔 Alert отображен:", alerts[0]);
     } else {
