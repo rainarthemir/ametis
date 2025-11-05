@@ -313,11 +313,48 @@ async function loadAlertsFromWebsite() {
     
   } catch (error) {
     console.error("❌ Ошибка загрузки алертов через Worker:", error);
+    
+    // Fallback: попробуем использовать CORS proxy
+    try {
+      console.log("🔄 Пробуем CORS proxy...");
+      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent('https://ametisfr.dmytrothemir.workers.dev/')}`;
+      const response = await fetch(proxyUrl);
+      
+      if (response.ok) {
+        const alertsData = await response.json();
+        console.log("✅ Алерты получены через CORS proxy");
+        return alertsData;
+      }
+    } catch (proxyError) {
+      console.error("❌ CORS proxy тоже не сработал:", proxyError);
+    }
+    
+    // Возвращаем структуру по умолчанию при ошибке
     return { 
       'en_cours': [], 
       'a_venir': [] 
     };
   }
+}
+
+// ---------- Получение цвета линии из GTFS2 ----------
+function getLineColor(lineNumber) {
+  if (!lineNumber) return '#666666'; // Серый по умолчанию
+  
+  const lineData = routes2ByShort[lineNumber];
+  if (lineData && lineData.route_color) {
+    return '#' + lineData.route_color;
+  }
+  
+  // Цвета по умолчанию для разных типов линий
+  const defaultColors = {
+    'T1': '#0066CC', 'T2': '#0066CC', // Трамваи - синий
+    'N1': '#993399', 'N2': '#993399', // Ночные - фиолетовый
+    '1': '#FF0000', '2': '#0066CC', '3': '#009900', '4': '#FF6600', '5': '#990099',
+    '6': '#66CC00', '7': '#FFCC00', '8': '#CC0066', '9': '#996633', '10': '#0099CC'
+  };
+  
+  return defaultColors[lineNumber] || '#666666';
 }
 
 // ---------- Очистка текста алерта ----------
@@ -332,36 +369,65 @@ function cleanAlertText(text) {
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&nbsp;/g, ' ')
-    // Убираем множественные переносы строк и пробелы
-    .replace(/\n\s*\n/g, '\n') // Убираем пустые строки
-    .replace(/\s+/g, ' ') // Заменяем множественные пробелы на один
+    // Убираем множественные пробелы
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
 // ---------- Форматирование сообщения алерта ----------
 function formatAlertMessage(alert) {
-  if (!alert.message) return '';
+  if (!alert.message) return null;
   
   const cleanMessage = cleanAlertText(alert.message);
-  const lineInfo = alert.line_number ? `Ligne ${alert.line_number} - ` : '';
+  const lineNumber = alert.line_number;
+  const lineColor = getLineColor(lineNumber);
   
   // Разделяем сообщение на части по переносам строк
   const parts = cleanMessage.split('\n').filter(part => part.trim());
   
-  if (parts.length <= 2) {
-    // Если сообщение короткое, показываем полностью
-    return `${lineInfo}${cleanMessage}`;
-  } else {
-    // Если длинное, берем первую строку как заголовок, остальное как описание
-    const title = parts[0];
-    const description = parts.slice(1).join(' ');
-    // Ограничиваем длину описания
-    const shortDescription = description.length > 150 
-      ? description.substring(0, 147) + '...' 
-      : description;
-    
-    return `${lineInfo}${title} - ${shortDescription}`;
+  let title = '';
+  let description = '';
+  
+  if (parts.length === 1) {
+    // Если только одна часть
+    title = parts[0];
+  } else if (parts.length >= 2) {
+    // Первая строка - заголовок, остальные - описание
+    title = parts[0];
+    description = parts.slice(1).join('\n');
   }
+  
+  return {
+    lineNumber: lineNumber,
+    lineColor: lineColor,
+    title: title,
+    description: description,
+    fullMessage: cleanMessage
+  };
+}
+
+// ---------- Создание HTML для алерта ----------
+function createAlertHTML(alertData) {
+  if (!alertData) return '';
+  
+  const lineBadgeHTML = alertData.lineNumber ? 
+    `<div class="alert-line-badge" style="background: ${alertData.lineColor}">
+      ${alertData.lineNumber}
+    </div>` : '';
+  
+  const titleHTML = alertData.title ? 
+    `<div class="alert-title">${alertData.title}</div>` : '';
+  
+  const descriptionHTML = alertData.description ? 
+    `<div class="alert-description">${alertData.description}</div>` : '';
+  
+  return `
+    ${lineBadgeHTML}
+    <div class="alert-content">
+      ${titleHTML}
+      ${descriptionHTML}
+    </div>
+  `;
 }
 
 // ---------- Запуск карусели алертов ----------
@@ -376,25 +442,45 @@ function startAlertCarousel(alerts) {
   currentAlertIndex = 0;
   
   // Если алертов нет или только один, не запускаем карусель
-  if (!currentAlerts.length || currentAlerts.length <= 1) {
-    if (alertBox && currentAlerts.length === 1) {
-      alertBox.textContent = currentAlerts[0];
+  if (!currentAlerts.length) {
+    if (alertBox) {
+      alertBox.innerHTML = '<div class="alert-normal">Trafic normal sur toutes les lignes</div>';
     }
     return;
   }
   
-  // Показываем первый алерт
-  if (alertBox) {
-    alertBox.textContent = currentAlerts[0];
+  if (currentAlerts.length === 1) {
+    if (alertBox) {
+      alertBox.innerHTML = createAlertHTML(currentAlerts[0]);
+    }
+    return;
   }
   
-  // Запускаем карусель - переключаем каждые 8 секунд
+  // Функция для показа алерта по индексу
+  function showAlert(index) {
+    if (!alertBox || !currentAlerts[index]) return;
+    
+    alertBox.innerHTML = createAlertHTML(currentAlerts[index]);
+    
+    // Добавляем индикатор прогресса карусели
+    const progressHTML = `
+      <div class="alert-progress">
+        ${currentAlerts.map((_, i) => 
+          `<div class="alert-progress-dot ${i === index ? 'active' : ''}"></div>`
+        ).join('')}
+      </div>
+    `;
+    alertBox.insertAdjacentHTML('beforeend', progressHTML);
+  }
+  
+  // Показываем первый алерт
+  showAlert(0);
+  
+  // Запускаем карусель - переключаем каждые 10 секунд
   alertCarouselInterval = setInterval(() => {
     currentAlertIndex = (currentAlertIndex + 1) % currentAlerts.length;
-    if (alertBox) {
-      alertBox.textContent = currentAlerts[currentAlertIndex];
-    }
-  }, 8000);
+    showAlert(currentAlertIndex);
+  }, 10000);
 }
 
 // ---------- Обновленная функция загрузки алертов ----------
@@ -409,9 +495,9 @@ async function loadAlerts() {
     // Добавляем текущие алерты (en_cours)
     if (websiteAlerts.en_cours && websiteAlerts.en_cours.length > 0) {
       websiteAlerts.en_cours.forEach(alert => {
-        const formattedMessage = formatAlertMessage(alert);
-        if (formattedMessage) {
-          displayAlerts.push(formattedMessage);
+        const formattedAlert = formatAlertMessage(alert);
+        if (formattedAlert) {
+          displayAlerts.push(formattedAlert);
         }
       });
     }
@@ -422,17 +508,18 @@ async function loadAlerts() {
         if (alert.message && 
             !alert.message.includes("Aucune perturbation de ligne à venir") &&
             !alert.message.includes("Aucune perturbation")) {
-          const formattedMessage = formatAlertMessage(alert);
-          if (formattedMessage) {
-            displayAlerts.push(`[À venir] ${formattedMessage}`);
+          const formattedAlert = formatAlertMessage(alert);
+          if (formattedAlert) {
+            formattedAlert.title = `[À venir] ${formattedAlert.title}`;
+            displayAlerts.push(formattedAlert);
           }
         }
       });
     }
     
-    // Если алертов нет, возвращаем стандартное сообщение
+    // Если алертов нет, возвращаем null для стандартного сообщения
     if (displayAlerts.length === 0) {
-      return ["Trafic normal sur toutes les lignes"];
+      return null;
     }
     
     console.log("🔔 Алерты для отображения:", displayAlerts);
@@ -440,7 +527,7 @@ async function loadAlerts() {
     
   } catch (error) {
     console.warn("⚠️ Ошибка загрузки алертов:", error);
-    return ["Trafic normal sur toutes les lignes"];
+    return null;
   }
 }
 
@@ -484,7 +571,7 @@ function findStop(identifier) {
 function renderBoard(deps, alerts, routeShortName, stopName) {
   console.log("🎨 Отрисовка табло:", { 
     отправлений: deps.length, 
-    уведомлений: alerts.length, 
+    уведомлений: alerts ? alerts.length : 0, 
     линия: routeShortName, 
     остановка: stopName 
   });
@@ -492,7 +579,16 @@ function renderBoard(deps, alerts, routeShortName, stopName) {
   // Устанавливаем номер линии и цвет
   if (lineBadge) {
     lineBadge.textContent = routeShortName;
-    lineBadge.className = `line-badge line-${routeShortName}`;
+    const lineColor = getLineColor(routeShortName);
+    lineBadge.style.background = lineColor;
+    
+    // Определяем цвет текста в зависимости от яркости фона
+    const hex = lineColor.replace('#', '');
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    lineBadge.style.color = brightness > 128 ? '#000' : '#fff';
   }
 
   const now = Math.floor(Date.now() / 1000);
@@ -556,7 +652,7 @@ function renderBoard(deps, alerts, routeShortName, stopName) {
 
   // Alerts
   if (alertBox) {
-    if (alerts.length > 0 && alerts[0] !== "Trafic normal sur toutes les lignes") {
+    if (alerts && alerts.length > 0) {
       // Запускаем карусель алертов
       startAlertCarousel(alerts);
     } else {
@@ -565,7 +661,7 @@ function renderBoard(deps, alerts, routeShortName, stopName) {
         clearInterval(alertCarouselInterval);
         alertCarouselInterval = null;
       }
-      alertBox.textContent = "Trafic normal sur toutes les lignes";
+      alertBox.innerHTML = '<div class="alert-normal">Trafic normal sur toutes les lignes</div>';
     }
   }
 
@@ -621,7 +717,7 @@ async function refreshBoard() {
     
     console.log("📦 Данные загружены:", { 
       отправлений: deps.length, 
-      уведомлений: alerts.length
+      уведомлений: alerts ? alerts.length : 0
     });
     
     renderBoard(deps, alerts, lineParam, stop.stop_name);
