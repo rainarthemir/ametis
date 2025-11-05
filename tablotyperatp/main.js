@@ -7,7 +7,7 @@ const GTFS_BASE = "../gtfs/";
 const GTFS2_BASE = "../gtfs2/";
 const PROTO_PATH = "../gtfs-realtime.proto";
 const RT_TRIP_URL = "https://proxy.transport.data.gouv.fr/resource/ametis-amiens-gtfs-rt-trip-update";
-const RT_ALERT_URL = "https://proxy.transport.data.gouv.fr/resource/ametis-amiens-gtfs-rt-alert";
+const RT_ALERT_URL = "https://proxy.transport.data.gouv.fr/resource/ametis-amiens-gtfs-rt-alerts";
 
 const DEFAULT_WINDOW_MIN = 120;
 const REFRESH_INTERVAL_MS = 20000;
