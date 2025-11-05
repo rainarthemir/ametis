@@ -3,62 +3,45 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Tablo RATP - Ametis</title>
+  <title>Tablo RATP</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="board" class="ratp-board">
-    <!-- RATP Logo -->
-    <div class="ratp-logo">RATP</div>
-    
+  <div class="ratp-board">
     <!-- Header -->
-    <header class="header">
-      <div class="stop-info">
-        <div id="stopTitle" class="stop-title">Château de Vincennes</div>
-        <div id="directionTitle" class="direction-title">Direction Paris</div>
+    <div class="header">
+      <div class="line-info">
+        <div id="lineBadge" class="line-badge">M1</div>
+        <div id="directionTitle" class="direction-title">Château de Vincennes</div>
       </div>
       <div id="clock" class="clock">15:29</div>
-    </header>
+    </div>
 
-    <!-- Main Content -->
-    <main class="main-content">
-      <!-- First departure -->
-      <div class="departure-row">
+    <!-- Main departures -->
+    <div class="departures">
+      <div class="departure-block">
         <div class="departure-label">1er métro</div>
-        <div class="departure-main">
-          <div id="lineBadge" class="line-badge">M1</div>
-          <div class="time-display">
-            <div id="firstTimeBig" class="time-big">0</div>
-            <div id="firstTimeSmall" class="time-small">| 3</div>
-          </div>
-        </div>
+        <div id="firstTimeBig" class="time-big">0</div>
+        <div id="firstTimeSmall" class="time-small">| 3</div>
       </div>
-
-      <div class="divider"></div>
-
-      <!-- Second departure -->
-      <div class="departure-row">
+      
+      <div class="departure-block">
         <div class="departure-label">2e métro</div>
-        <div class="departure-main">
-          <div class="line-badge" style="background: #e3000b; color: white">M</div>
-          <div class="time-display">
-            <div id="secondTimeBig" class="time-big">1</div>
-            <div id="secondTimeSmall" class="time-small"></div>
-          </div>
-        </div>
+        <div id="secondTimeBig" class="time-big">1</div>
+        <div id="secondTimeSmall" class="time-small"></div>
       </div>
+    </div>
 
-      <!-- Alert message -->
-      <div class="alert-panel">
-        <div id="alertBox" class="alert-text">
-          Du 17 juin au 21 septembre, station Tuileries fermée complètement (jeux de Paris 2024)
-        </div>
+    <!-- Traffic info -->
+    <div class="traffic-info">
+      <div id="alertBox" class="alert-text">
+        Information trafic en cours de chargement...
       </div>
-    </main>
+    </div>
 
     <!-- Status -->
-    <div class="status-panel">
-      <div id="status" class="status">Actualisé à 15:29</div>
+    <div class="status">
+      <div id="status">Actualisé à 15:29</div>
     </div>
   </div>
 
