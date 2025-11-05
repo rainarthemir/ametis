@@ -134,15 +134,16 @@ function getActiveServiceIds() {
 }
 
 // ---------- Сбор отправлений ----------
+// ---------- Сбор отправлений ----------
 async function collectDepartures(stopId, routeShortName) {
   const activeServices = getActiveServiceIds();
   const now = Math.floor(Date.now() / 1000);
   const windowEnd = now + DEFAULT_WINDOW_MIN * 60;
   
   let deps = [];
-  const processedTrips = new Set();
+  const processedTripIds = new Set();
 
-  // === RT данные ===
+  // === RT данные (реальное время) ===
   try {
     const feed = await fetchRTandDecode(RT_TRIP_URL);
     console.log("📡 RT данные получены, entities:", feed.entity?.length || 0);
@@ -158,13 +159,9 @@ async function collectDepartures(stopId, routeShortName) {
         const tripId = trip.trip_id;
         const routeId = trip.route_id;
 
-        // Проверяем маршрут - ищем по route_id в routes
+        // Проверяем маршрут
         const route = routes[routeId];
-        if (!route) {
-          continue;
-        }
-        
-        if (route.route_short_name !== routeShortName) continue;
+        if (!route || route.route_short_name !== routeShortName) continue;
 
         const stus = tu.stop_time_update || [];
         for (const stu of stus) {
@@ -180,18 +177,7 @@ async function collectDepartures(stopId, routeShortName) {
 
           // Находим trip для получения headsign
           const tripInfo = trips.find(t => t.trip_id === tripId);
-          if (!tripInfo) {
-            continue;
-          }
-
-          // Создаем ключ для проверки дубликатов (время + направление)
-          const duplicateKey = `${depTs}_${tripInfo.trip_headsign}`;
-          
-          // Проверяем, не обрабатывали ли мы уже этот рейс ИЛИ рейс с таким же временем и направлением
-          if (processedTrips.has(tripId) || processedTrips.has(duplicateKey)) {
-            console.log("🚫 Пропускаем дубликат:", { tripId, duplicateKey });
-            continue;
-          }
+          if (!tripInfo) continue;
 
           deps.push({
             tripId,
@@ -203,8 +189,7 @@ async function collectDepartures(stopId, routeShortName) {
             source: "RT",
           });
           
-          processedTrips.add(tripId);
-          processedTrips.add(duplicateKey); // Защита от дубликатов с разными tripId но одинаковым временем+направлением
+          processedTripIds.add(tripId);
         }
       }
     }
@@ -212,7 +197,7 @@ async function collectDepartures(stopId, routeShortName) {
     console.warn("⚠️ RT error:", e.message);
   }
 
-  // === Статические данные (дополняем RT) ===
+  // === Статические данные (теоретическое расписание) ===
   const nowObj = new Date();
   const secToday = nowObj.getHours() * 3600 + nowObj.getMinutes() * 60 + nowObj.getSeconds();
   
@@ -242,23 +227,16 @@ async function collectDepartures(stopId, routeShortName) {
     const route = routes[trip.route_id];
     if (!route || route.route_short_name !== routeShortName) continue;
     
+    // Пропускаем если уже есть RT данные для этого trip
+    if (processedTripIds.has(trip.trip_id)) {
+      continue;
+    }
+
     // Вычисляем timestamp для статического времени
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const baseTime = Math.floor(todayStart.getTime() / 1000);
     const departureTime = baseTime + sec;
-
-    // Создаем ключ для проверки дубликатов (время + направление)
-    const duplicateKey = `${departureTime}_${trip.trip_headsign}`;
-    
-    // Проверяем, нет ли уже этого trip в RT данных ИЛИ рейса с таким же временем и направлением
-    if (processedTrips.has(trip.trip_id) || processedTrips.has(duplicateKey)) {
-      console.log("🚫 Пропускаем статический дубликат:", { 
-        tripId: trip.trip_id, 
-        duplicateKey 
-      });
-      continue;
-    }
 
     deps.push({
       tripId: trip.trip_id,
@@ -269,15 +247,13 @@ async function collectDepartures(stopId, routeShortName) {
       departureTime: departureTime,
       source: "GTFS",
     });
-    
-    processedTrips.add(trip.trip_id);
-    processedTrips.add(duplicateKey);
   }
 
   // Сортируем по времени отправления
   deps.sort((a, b) => a.departureTime - b.departureTime);
   
   console.log("📋 Финальные отправления:", deps.map(d => ({
+    tripId: d.tripId,
     source: d.source,
     headsign: d.headsign,
     minutes: minutesUntil(d.departureTime),
