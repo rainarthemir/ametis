@@ -1,20 +1,20 @@
 // ---------------------
-// main.js - RATP Style Board
+// main.js - RATP Board
 // ---------------------
 
 // ---------- НАСТРОЙКИ ----------
 const GTFS_BASE = "../gtfs/";
 const GTFS2_BASE = "../gtfs2/";
 const PROTO_PATH = "../gtfs-realtime.proto";
-const RT_URL = "https://proxy.transport.data.gouv.fr/resource/ametis-amiens-gtfs-rt-trip-update";
+const RT_TRIP_URL = "https://proxy.transport.data.gouv.fr/resource/ametis-amiens-gtfs-rt-trip-update";
+const RT_ALERT_URL = "https://proxy.transport.data.gouv.fr/resource/ametis-amiens-gtfs-rt-alert";
 
 const DEFAULT_WINDOW_MIN = 120;
 const REFRESH_INTERVAL_MS = 20000;
 
 // ---------- DOM ----------
-const stopTitle = document.getElementById("stopTitle");
-const directionTitle = document.getElementById("directionTitle");
 const lineBadge = document.getElementById("lineBadge");
+const directionTitle = document.getElementById("directionTitle");
 const clock = document.getElementById("clock");
 const firstTimeBig = document.getElementById("firstTimeBig");
 const firstTimeSmall = document.getElementById("firstTimeSmall");
@@ -30,23 +30,15 @@ let routes2ByShort = {};
 let trips = [];
 let stopTimes = [];
 let calendar = [];
+let calendarDates = [];
 let mergedStops = {};
 let protoRoot = null;
-let pendingFetchPromise = null;
+let currentStopId = null;
 
 // ---------- Утилиты ----------
-function logStatus(t, err = false) {
-  statusBox.textContent = t;
-  statusBox.style.color = err ? "#b22" : "inherit";
-}
-
-function utcSecondsToLocalTimeStr(ts) {
-  if (!ts || isNaN(ts)) return "—";
-  return new Date(ts * 1000).toLocaleTimeString("fr-FR", {
-    timeZone: "Europe/Paris",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+function logStatus(t) {
+  const now = new Date();
+  statusBox.textContent = `Actualisé à ${now.toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'})}`;
 }
 
 function minutesUntil(ts) {
@@ -61,53 +53,14 @@ async function loadCSV(p) {
   return Papa.parse(await r.text(), { header: true, skipEmptyLines: true }).data;
 }
 
-// ---------- Нормализация / merged stops ----------
-function normalizeNameForGroup(name) {
-  if (!name) return "";
-  let s = name
-    .replace(/\b(?:Quai|Quais|Voie|Voies|Platform|Plateforme)\b.*$/i, "")
-    .replace(/\(.*?\)/g, "")
-    .replace(/\s+[A-Z0-9]{1,2}$/i, "")
-    .replace(/[-–—]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
-  return s.replace(/\b(arrêt|station)\b/gi, "").trim();
-}
-
-function detectPlatformFromName(name) {
-  if (!name) return null;
-  const m = name.match(/\b(?:Quai|Voie|Platform|Plateforme)\b[^\w]*([A-Z0-9]+)\b/i) || name.match(/\b([A-Z0-9])\b$/);
-  return m ? (m[1] || m[0]).toString() : null;
-}
-
-function buildMergedStops() {
-  mergedStops = {};
-  for (const s of stops) {
-    const key = normalizeNameForGroup(s.stop_name);
-    if (!key) continue;
-    if (!mergedStops[key])
-      mergedStops[key] = {
-        baseName: s.stop_name.replace(/\s*(?:Quai|Voie|Platform|Bus|Tram).*/i, "").trim(),
-        memberStopIds: [],
-        platforms: new Set(),
-      };
-    mergedStops[key].memberStopIds.push(s.stop_id);
-    const pf = detectPlatformFromName(s.stop_name) || s.platform_code || s.stop_code;
-    if (pf) mergedStops[key].platforms.add(String(pf));
-  }
-  for (const k of Object.keys(mergedStops))
-    mergedStops[k].platforms = Array.from(mergedStops[k].platforms).sort();
-}
-
 // ---------- Proto ----------
 async function loadProto() {
   protoRoot = await protobuf.load(PROTO_PATH);
 }
 
-async function fetchRTandDecode() {
+async function fetchRTandDecode(url) {
   if (!protoRoot) throw new Error("protoRoot не загружен");
-  const r = await fetch(RT_URL);
+  const r = await fetch(url);
   if (!r.ok) throw new Error("Ошибка RT " + r.status);
   const buf = await r.arrayBuffer();
   const FeedMessage = protoRoot.lookupType("transit_realtime.FeedMessage");
@@ -117,90 +70,102 @@ async function fetchRTandDecode() {
 
 // ---------- Загрузка GTFS ----------
 async function loadGTFS() {
-  logStatus("Загружаю GTFS...");
-  const [stopsData, routesData, routes2Data, tripsData, stopTimesData, calendarData] = await Promise.all([
+  const [stopsData, routesData, routes2Data, tripsData, stopTimesData, calendarData, calendarDatesData] = await Promise.all([
     loadCSV(GTFS_BASE + "stops.txt"),
     loadCSV(GTFS_BASE + "routes.txt"),
     loadCSV(GTFS2_BASE + "routes.txt").catch(() => []),
-    loadCSV(GTFS_BASE + "trips.txt").catch(() => []),
-    loadCSV(GTFS_BASE + "stop_times.txt").catch(() => []),
+    loadCSV(GTFS_BASE + "trips.txt"),
+    loadCSV(GTFS_BASE + "stop_times.txt"),
     loadCSV(GTFS_BASE + "calendar.txt").catch(() => []),
+    loadCSV(GTFS_BASE + "calendar_dates.txt").catch(() => [])
   ]);
 
   stops = stopsData;
   routes = {};
   for (const r of routesData) if (r.route_id) routes[r.route_id] = r;
+  
   routes2ByShort = {};
   for (const r of routes2Data) if (r.route_short_name) routes2ByShort[r.route_short_name] = r;
+  
   trips = tripsData;
   stopTimes = stopTimesData;
   calendar = calendarData;
+  calendarDates = calendarDatesData;
 
-  buildMergedStops();
-  console.log("✅ GTFS загружен:", { stops: stops.length, trips: trips.length, stopTimes: stopTimes.length });
+  console.log("✅ GTFS загружен:", { 
+    stops: stops.length, 
+    routes: routesData.length,
+    trips: trips.length, 
+    stopTimes: stopTimes.length 
+  });
+}
+
+// ---------- Поиск активных сервисов ----------
+function getActiveServiceIds() {
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10).replace(/-/g, '');
+  const weekday = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][now.getDay()];
+  
+  // Проверяем calendar_dates на исключения
+  const exceptions = calendarDates.filter(cd => cd.date === today);
+  const addedServices = new Set(exceptions.filter(cd => cd.exception_type === '1').map(cd => cd.service_id));
+  const removedServices = new Set(exceptions.filter(cd => cd.exception_type === '2').map(cd => cd.service_id));
+  
+  // Базовые сервисы из calendar
+  const baseServices = calendar.filter(c => c[weekday] === '1').map(c => c.service_id);
+  
+  // Применяем исключения
+  const activeServices = new Set(baseServices.filter(s => !removedServices.has(s)));
+  addedServices.forEach(s => activeServices.add(s));
+  
+  return Array.from(activeServices);
 }
 
 // ---------- Сбор отправлений ----------
-async function collectDeparturesForMergedKey(keyOrStopId, platformFilterVal, windowMinutes) {
-  let key = keyOrStopId;
-  if (!mergedStops[key]) {
-    for (const k of Object.keys(mergedStops)) {
-      if (mergedStops[k].memberStopIds.includes(String(keyOrStopId))) {
-        key = k;
-        break;
-      }
-    }
-  }
-  const merged = mergedStops[key];
-  if (!merged) return [];
+async function collectDepartures(stopId, routeShortName) {
+  const activeServices = getActiveServiceIds();
   const now = Math.floor(Date.now() / 1000);
-  const windowEnd = now + (windowMinutes || DEFAULT_WINDOW_MIN) * 60;
+  const windowEnd = now + DEFAULT_WINDOW_MIN * 60;
+  
   let deps = [];
 
-  // === RT ===
-  const rtTrips = new Set();
+  // === RT данные ===
   try {
-    const feed = await fetchRTandDecode();
+    const feed = await fetchRTandDecode(RT_TRIP_URL);
     if (feed.entity) {
       for (const e of feed.entity) {
-        const tu = e.trip_update || e.tripUpdate;
+        const tu = e.trip_update;
         if (!tu) continue;
-        const trip = tu.trip || tu.tripDescriptor;
+        
+        const trip = tu.trip;
         if (!trip) continue;
+        
         const tripId = trip.trip_id;
-        rtTrips.add(tripId);
+        const routeId = trip.route_id;
 
-        const stus = tu.stop_time_update || tu.stopTimeUpdate || [];
+        // Проверяем маршрут
+        const route = routes[routeId];
+        if (!route || route.route_short_name !== routeShortName) continue;
+
+        const stus = tu.stop_time_update || [];
         for (const stu of stus) {
-          const stopId = stu.stop_id || stu.stopId;
-          if (!merged.memberStopIds.includes(stopId)) continue;
-          const depObj = stu.departure || stu.arrival;
-          const depTs = depObj ? Number(depObj.time || depObj) : null;
+          const stopIdRt = stu.stop_id;
+          if (stopIdRt !== stopId) continue;
+          
+          const depTs = stu.departure ? Number(stu.departure.time) : null;
           if (!depTs || depTs < now || depTs > windowEnd) continue;
 
-          let pf = stu.platform || stu.stop_platform || stu.stopPlatform;
-          if (!pf) {
-            const s = stops.find((x) => x.stop_id === stopId);
-            if (s) pf = detectPlatformFromName(s.stop_name) || s.platform_code || s.stop_code;
-          }
-          if (platformFilterVal && String(pf) !== String(platformFilterVal)) continue;
-
-          const tripRow = trips.find((t) => t.trip_id === tripId);
-          const headsign = tripRow ? tripRow.trip_headsign || "" : "";
-
-          const routeShort = trip.route_short_name || trip.routeShortName || tripRow?.route_short_name;
-          const routeColor =
-            (routes2ByShort[routeShort]?.route_color && "#" + routes2ByShort[routeShort].route_color) || "#333";
+          // Находим trip для получения headsign
+          const tripInfo = trips.find(t => t.trip_id === tripId);
+          if (!tripInfo) continue;
 
           deps.push({
             tripId,
-            routeId: trip.route_id || trip.routeId,
-            routeShort,
-            headsign,
-            stopId,
-            platform: pf,
+            routeId,
+            routeShort: routeShortName,
+            headsign: tripInfo.trip_headsign || "",
+            stopId: stopIdRt,
             departureTime: depTs,
-            color: routeColor,
             source: "RT",
           });
         }
@@ -210,105 +175,104 @@ async function collectDeparturesForMergedKey(keyOrStopId, platformFilterVal, win
     console.warn("⚠️ RT error:", e.message);
   }
 
-  // === STATIC ===
+  // === Статические данные (дополняем RT) ===
   const nowObj = new Date();
   const secToday = nowObj.getHours() * 3600 + nowObj.getMinutes() * 60 + nowObj.getSeconds();
-  const weekday = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][nowObj.getDay()];
-  const activeServices = calendar.filter((c) => c[weekday] === "1").map((c) => c.service_id);
-
-  for (const st of stopTimes) {
-    if (!merged.memberStopIds.includes(st.stop_id)) continue;
-    const [h, m, s] = (st.departure_time || st.arrival_time || "00:00:00").split(":").map(Number);
+  
+  // Находим stop_times для этой остановки
+  const relevantStopTimes = stopTimes.filter(st => st.stop_id === stopId);
+  
+  for (const st of relevantStopTimes) {
+    const [h, m, s] = (st.departure_time || "00:00:00").split(":").map(Number);
     const sec = h * 3600 + m * 60 + (s || 0);
-    if (sec < secToday || sec > secToday + windowMinutes * 60) continue;
+    if (sec < secToday || sec > secToday + DEFAULT_WINDOW_MIN * 60) continue;
 
-    const trip = trips.find((t) => t.trip_id === st.trip_id && activeServices.includes(t.service_id));
+    const trip = trips.find(t => t.trip_id === st.trip_id && activeServices.includes(t.service_id));
     if (!trip) continue;
-    if (rtTrips.has(trip.trip_id)) continue;
-
-    const routeShort = trip.route_short_name;
-    const color =
-      (routes2ByShort[routeShort]?.route_color && "#" + routes2ByShort[routeShort].route_color) || "#555";
+    
+    const route = routes[trip.route_id];
+    if (!route || route.route_short_name !== routeShortName) continue;
+    
+    // Проверяем, нет ли уже этого trip в RT данных
+    if (deps.some(d => d.tripId === trip.trip_id)) continue;
 
     deps.push({
-      tripId: st.trip_id,
+      tripId: trip.trip_id,
       routeId: trip.route_id,
-      routeShort,
+      routeShort: routeShortName,
       headsign: trip.trip_headsign || "",
-      stopId: st.stop_id,
-      platform: stops.find((s) => s.stop_id === st.stop_id)?.platform_code || "",
+      stopId: stopId,
       departureTime: Math.floor(now / 86400) * 86400 + sec,
-      color,
       source: "GTFS",
     });
   }
 
+  // Сортируем по времени отправления
   deps.sort((a, b) => a.departureTime - b.departureTime);
   return deps;
 }
 
-// ---------- UI / LOGIC: чтение параметров URL ----------
-const params = new URLSearchParams(location.search);
-const idParam = params.get("id") || params.get("stop") || params.get("key");
-const lineParam = params.get("line") || params.get("route") || params.get("r");
-
-function resolveMergedKey(param) {
-  if (!param) return null;
-  if (mergedStops[param]) return param;
-  for (const k of Object.keys(mergedStops)) {
-    if (mergedStops[k].memberStopIds.includes(String(param))) return k;
+// ---------- Загрузка alerts ----------
+async function loadAlerts() {
+  try {
+    const feed = await fetchRTandDecode(RT_ALERT_URL);
+    const alerts = [];
+    
+    if (feed.entity) {
+      for (const e of feed.entity) {
+        const alert = e.alert;
+        if (alert && alert.header_text) {
+          // Берем французский перевод
+          const translation = alert.header_text.translation.find(t => t.language === 'fr') || 
+                             alert.header_text.translation[0];
+          if (translation) {
+            alerts.push(translation.text);
+          }
+        }
+      }
+    }
+    
+    return alerts;
+  } catch (e) {
+    console.warn("⚠️ Alerts error:", e.message);
+    return [];
   }
-  for (const k of Object.keys(mergedStops)) {
-    if (mergedStops[k].baseName.toLowerCase().includes(String(param).toLowerCase())) return k;
-  }
-  return null;
 }
 
-// ---------- Отрисовка табло в стиле РАТП ----------
-function renderBoardFromDeps(mergedKey, deps, preferredLine) {
-  if (mergedKey && mergedStops[mergedKey]) {
-    stopTitle.textContent = mergedStops[mergedKey].baseName;
-  } else {
-    stopTitle.textContent = idParam || "—";
-  }
+// ---------- Поиск остановки по имени ----------
+function findStopByName(stopName) {
+  const normalized = stopName.toLowerCase().trim();
+  return stops.find(stop => 
+    stop.stop_name.toLowerCase().includes(normalized)
+  );
+}
 
-  let filtered = deps;
-  if (preferredLine) {
-    filtered = deps.filter((d) => 
-      String(d.routeShort) === String(preferredLine) || 
-      String(d.routeId) === String(preferredLine)
-    );
-  }
+// ---------- Отрисовка табло ----------
+function renderBoard(deps, alerts, routeShortName, stopName) {
+  // Устанавливаем номер линии и цвет
+  lineBadge.textContent = routeShortName;
+  lineBadge.className = `line-badge line-${routeShortName}`;
 
   const now = Math.floor(Date.now() / 1000);
-  const next = filtered
+  const nextDeps = deps
     .map(d => ({...d, minutes: minutesUntil(d.departureTime)}))
     .filter(d => d.minutes !== null && d.minutes >= 0)
-    .sort((a,b) => a.departureTime - b.departureTime)
-    .slice(0, 5);
+    .slice(0, 3);
 
   // Первое отправление
-  if (next[0]) {
-    const d = next[0];
+  if (nextDeps[0]) {
+    const d = nextDeps[0];
     firstTimeBig.textContent = d.minutes === 0 ? "0" : `${d.minutes}`;
+    directionTitle.textContent = d.headsign || stopName || "Direction inconnue";
     
-    // Ищем следующее отправление той же линии
-    const nextSameLine = filtered
-      .filter(x => x.routeShort === d.routeShort && x.departureTime > d.departureTime)
-      .sort((a,b) => a.departureTime - b.departureTime)[0];
-    
+    // Следующее отправление той же линии
+    const nextSameLine = nextDeps[1];
     if (nextSameLine) {
-      const nextMinutes = minutesUntil(nextSameLine.departureTime);
-      firstTimeSmall.textContent = `| ${nextMinutes}`;
+      firstTimeSmall.textContent = `| ${nextSameLine.minutes}`;
     } else {
       firstTimeSmall.textContent = "";
     }
 
-    lineBadge.style.background = d.color || "#f2c100";
-    lineBadge.textContent = d.routeShort || d.routeId || "—";
-    directionTitle.textContent = d.headsign || "";
-    
-    // Подсветка если меньше 2 минут
     if (d.minutes <= 2) {
       firstTimeBig.classList.add('soon');
     } else {
@@ -318,13 +282,12 @@ function renderBoardFromDeps(mergedKey, deps, preferredLine) {
     firstTimeBig.textContent = "--";
     firstTimeSmall.textContent = "";
     firstTimeBig.classList.remove('soon');
-    lineBadge.textContent = "—";
-    directionTitle.textContent = "—";
+    directionTitle.textContent = stopName || "Aucun départ";
   }
 
-  // Второе отправление (следующая линия)
-  if (next[1]) {
-    const d = next[1];
+  // Второе отправление
+  if (nextDeps[1]) {
+    const d = nextDeps[1];
     secondTimeBig.textContent = d.minutes === 0 ? "0" : `${d.minutes}`;
     secondTimeSmall.textContent = "";
     
@@ -339,16 +302,14 @@ function renderBoardFromDeps(mergedKey, deps, preferredLine) {
     secondTimeBig.classList.remove('soon');
   }
 
-  // Статус
-  const nowTime = new Date();
-  statusBox.textContent = `Actualisé à ${nowTime.toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'})}`;
-  
-  // Уведомления
-  if (filtered.length === 0 && preferredLine) {
-    alertBox.textContent = `Aucun départ pour la ligne "${preferredLine}" dans les prochaines ${DEFAULT_WINDOW_MIN} minutes.`;
+  // Alerts
+  if (alerts.length > 0) {
+    alertBox.textContent = alerts[0];
   } else {
-    alertBox.textContent = "";
+    alertBox.textContent = "Trafic normal sur toutes les lignes";
   }
+
+  logStatus();
 }
 
 // ---------- Обновление часов ----------
@@ -363,26 +324,29 @@ function updateClockUI() {
 
 // ---------- Основная функция обновления ----------
 async function refreshBoard() {
-  if (!idParam) {
-    logStatus("Paramètre id manquant dans l'URL (ex: ?id=nom-de-la-station ou ?id=12345)", true);
-    return;
-  }
+  const params = new URLSearchParams(location.search);
+  const stopParam = params.get("stop") || "Gare d'Amiens";
+  const lineParam = params.get("line") || "T1";
   
-  const mergedKey = resolveMergedKey(idParam);
-  if (!mergedKey) {
-    console.warn("Clé merged non trouvée, tentative avec stop_id:", idParam);
-  }
-
   try {
-    logStatus("Chargement des départs...");
-    pendingFetchPromise = collectDeparturesForMergedKey(mergedKey || idParam, "", 120);
-    const deps = await pendingFetchPromise;
-    renderBoardFromDeps(mergedKey, deps, lineParam);
+    // Находим остановку
+    const stop = findStopByName(stopParam);
+    if (!stop) {
+      console.error("Остановка не найдена:", stopParam);
+      return;
+    }
+    
+    currentStopId = stop.stop_id;
+    
+    const [deps, alerts] = await Promise.all([
+      collectDepartures(currentStopId, lineParam),
+      loadAlerts()
+    ]);
+    
+    renderBoard(deps, alerts, lineParam, stop.stop_name);
   } catch (e) {
-    logStatus("Erreur: " + e.message, true);
-    console.error(e);
-  } finally {
-    pendingFetchPromise = null;
+    console.error("Erreur:", e);
+    alertBox.textContent = "Erreur de chargement des données";
   }
 }
 
@@ -391,8 +355,7 @@ async function init() {
   try {
     await loadGTFS();
     await loadProto();
-    logStatus("Prêt - chargement du tableau...");
-
+    
     // Первый рендер
     await refreshBoard();
 
@@ -405,8 +368,8 @@ async function init() {
       refreshBoard();
     }, REFRESH_INTERVAL_MS);
   } catch (e) {
-    logStatus("Erreur d'initialisation: " + e.message, true);
-    console.error(e);
+    console.error("Erreur d'initialisation:", e);
+    alertBox.textContent = "Erreur d'initialisation";
   }
 }
 
