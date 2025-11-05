@@ -140,7 +140,6 @@ async function collectDepartures(stopId, routeShortName) {
   const windowEnd = now + DEFAULT_WINDOW_MIN * 60;
   
   let deps = [];
-  let rtDataAvailable = false;
 
   // === RT данные (реальное время) ===
   try {
@@ -148,7 +147,7 @@ async function collectDepartures(stopId, routeShortName) {
     console.log("📡 RT данные получены, entities:", feed.entity?.length || 0);
     
     if (feed.entity && feed.entity.length > 0) {
-      rtDataAvailable = true;
+      const rtTrips = new Set(); // Для отслеживания trip'ов из RT
       
       for (const e of feed.entity) {
         const tu = e.trip_update;
@@ -189,17 +188,21 @@ async function collectDepartures(stopId, routeShortName) {
             departureTime: depTs,
             source: "RT",
           });
+          
+          rtTrips.add(tripId);
         }
       }
+      
+      console.log("✅ RT данные обработаны, найдено отправлений:", deps.length);
     }
   } catch (e) {
     console.warn("⚠️ RT error:", e.message);
-    rtDataAvailable = false;
   }
 
-  // === Только если RT данные недоступны или пустые - используем статические данные ===
-  if (!rtDataAvailable || deps.length === 0) {
-    console.log("🔄 Используем теоретическое расписание (RT данные недоступны)");
+  // === Статические данные (теоретическое расписание) ===
+  // Используем только если RT данные недоступны или их недостаточно
+  if (deps.length === 0) {
+    console.log("🔄 Используем теоретическое расписание");
     
     const nowObj = new Date();
     const secToday = nowObj.getHours() * 3600 + nowObj.getMinutes() * 60 + nowObj.getSeconds();
@@ -217,6 +220,9 @@ async function collectDepartures(stopId, routeShortName) {
     
     console.log("📊 Найдено stop_times:", relevantStopTimes.length, "для остановки", stopId);
     
+    // Группируем stop_times по времени и направлению
+    const timeHeadsignMap = new Map();
+    
     for (const st of relevantStopTimes) {
       const [h, m, s] = (st.departure_time || "00:00:00").split(":").map(Number);
       const sec = h * 3600 + m * 60 + (s || 0);
@@ -230,39 +236,42 @@ async function collectDepartures(stopId, routeShortName) {
       const route = routes[trip.route_id];
       if (!route || route.route_short_name !== routeShortName) continue;
 
-      // Вычисляем timestamp для статического времени
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const baseTime = Math.floor(todayStart.getTime() / 1000);
-      const departureTime = baseTime + sec;
+      const headsign = trip.trip_headsign || "";
+      
+      // Создаем ключ: время + направление
+      const key = `${sec}_${headsign}`;
+      
+      // Если для этого времени и направления еще нет trip'а, добавляем
+      if (!timeHeadsignMap.has(key)) {
+        // Вычисляем timestamp для статического времени
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const baseTime = Math.floor(todayStart.getTime() / 1000);
+        const departureTime = baseTime + sec;
 
-      deps.push({
-        tripId: trip.trip_id,
-        routeId: trip.route_id,
-        routeShort: routeShortName,
-        headsign: trip.trip_headsign || "",
-        stopId: stopId,
-        departureTime: departureTime,
-        source: "GTFS",
-      });
+        timeHeadsignMap.set(key, {
+          tripId: trip.trip_id,
+          routeId: trip.route_id,
+          routeShort: routeShortName,
+          headsign: headsign,
+          stopId: stopId,
+          departureTime: departureTime,
+          source: "GTFS",
+        });
+      }
+      // Если уже есть - пропускаем этот trip (не добавляем дубликаты)
     }
+    
+    // Преобразуем Map в массив
+    deps = Array.from(timeHeadsignMap.values());
+    
+    console.log("📋 Уникальные теоретические отправления:", deps.length);
   }
 
-  // Сортируем по времени отправления и убираем дубликаты по tripId
+  // Сортируем по времени отправления
   deps.sort((a, b) => a.departureTime - b.departureTime);
   
-  // Фильтруем дубликаты по tripId (на всякий случай)
-  const uniqueDeps = [];
-  const seenTripIds = new Set();
-  
-  for (const dep of deps) {
-    if (!seenTripIds.has(dep.tripId)) {
-      uniqueDeps.push(dep);
-      seenTripIds.add(dep.tripId);
-    }
-  }
-  
-  console.log("📋 Финальные отправления:", uniqueDeps.map(d => ({
+  console.log("🎯 Финальные отправления:", deps.map(d => ({
     tripId: d.tripId,
     source: d.source,
     headsign: d.headsign,
@@ -270,7 +279,7 @@ async function collectDepartures(stopId, routeShortName) {
     time: new Date(d.departureTime * 1000).toLocaleTimeString()
   })));
   
-  return uniqueDeps;
+  return deps;
 }
 
 // ---------- Получение алертов через Cloudflare Worker ----------
