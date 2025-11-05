@@ -163,6 +163,16 @@ async function collectDepartures(stopId, routeShortName) {
         const route = routes[routeId];
         if (!route || route.route_short_name !== routeShortName) continue;
 
+        // Находим trip для получения headsign и service_id
+        const tripInfo = trips.find(t => t.trip_id === tripId);
+        if (!tripInfo) continue;
+        
+        // ВАЖНОЕ ИСПРАВЛЕНИЕ: проверяем, активен ли сервис для этого трипа
+        if (!activeServices.includes(tripInfo.service_id)) {
+          console.log("🚫 Пропускаем RT trip - неактивный сервис:", tripId, tripInfo.service_id);
+          continue;
+        }
+
         const stus = tu.stop_time_update || [];
         for (const stu of stus) {
           const stopIdRt = stu.stop_id;
@@ -174,10 +184,6 @@ async function collectDepartures(stopId, routeShortName) {
           
           const depTs = Number(depObj.time);
           if (!depTs || depTs < now || depTs > windowEnd) continue;
-
-          // Находим trip для получения headsign
-          const tripInfo = trips.find(t => t.trip_id === tripId);
-          if (!tripInfo) continue;
 
           deps.push({
             tripId,
