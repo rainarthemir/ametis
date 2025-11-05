@@ -647,6 +647,7 @@ function renderBoard(deps, alerts, routeShortName, stopName) {
   logStatus();
 }
 // ---------- Обновление часов ----------
+// ---------- Обновление часов ----------
 function updateClockUI() {
   if (clock) {
     const now = new Date();
@@ -655,6 +656,9 @@ function updateClockUI() {
       minute: '2-digit',
       hour12: false 
     });
+    
+    // Гарантируем, что часы всегда поверх других элементов
+    clock.style.zIndex = '1000';
   }
 }
 
