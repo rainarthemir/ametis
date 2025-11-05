@@ -134,21 +134,22 @@ function getActiveServiceIds() {
 }
 
 // ---------- Сбор отправлений ----------
-// ---------- Сбор отправлений ----------
 async function collectDepartures(stopId, routeShortName) {
   const activeServices = getActiveServiceIds();
   const now = Math.floor(Date.now() / 1000);
   const windowEnd = now + DEFAULT_WINDOW_MIN * 60;
   
   let deps = [];
-  const processedTripIds = new Set();
+  let rtDataAvailable = false;
 
   // === RT данные (реальное время) ===
   try {
     const feed = await fetchRTandDecode(RT_TRIP_URL);
     console.log("📡 RT данные получены, entities:", feed.entity?.length || 0);
     
-    if (feed.entity) {
+    if (feed.entity && feed.entity.length > 0) {
+      rtDataAvailable = true;
+      
       for (const e of feed.entity) {
         const tu = e.trip_update;
         if (!tu) continue;
@@ -188,71 +189,80 @@ async function collectDepartures(stopId, routeShortName) {
             departureTime: depTs,
             source: "RT",
           });
-          
-          processedTripIds.add(tripId);
         }
       }
     }
   } catch (e) {
     console.warn("⚠️ RT error:", e.message);
+    rtDataAvailable = false;
   }
 
-  // === Статические данные (теоретическое расписание) ===
-  const nowObj = new Date();
-  const secToday = nowObj.getHours() * 3600 + nowObj.getMinutes() * 60 + nowObj.getSeconds();
-  
-  // Находим stop_times для этой остановки и маршрута
-  const relevantStopTimes = stopTimes.filter(st => {
-    if (st.stop_id !== stopId) return false;
+  // === Только если RT данные недоступны или пустые - используем статические данные ===
+  if (!rtDataAvailable || deps.length === 0) {
+    console.log("🔄 Используем теоретическое расписание (RT данные недоступны)");
     
-    const trip = trips.find(t => t.trip_id === st.trip_id);
-    if (!trip) return false;
+    const nowObj = new Date();
+    const secToday = nowObj.getHours() * 3600 + nowObj.getMinutes() * 60 + nowObj.getSeconds();
     
-    const route = routes[trip.route_id];
-    return route && route.route_short_name === routeShortName;
-  });
-  
-  console.log("📊 Найдено stop_times:", relevantStopTimes.length, "для остановки", stopId);
-  
-  for (const st of relevantStopTimes) {
-    const [h, m, s] = (st.departure_time || "00:00:00").split(":").map(Number);
-    const sec = h * 3600 + m * 60 + (s || 0);
-    
-    // Проверяем время (в пределах 2 часов)
-    if (sec < secToday || sec > secToday + DEFAULT_WINDOW_MIN * 60) continue;
-
-    const trip = trips.find(t => t.trip_id === st.trip_id && activeServices.includes(t.service_id));
-    if (!trip) continue;
-    
-    const route = routes[trip.route_id];
-    if (!route || route.route_short_name !== routeShortName) continue;
-    
-    // Пропускаем если уже есть RT данные для этого trip
-    if (processedTripIds.has(trip.trip_id)) {
-      continue;
-    }
-
-    // Вычисляем timestamp для статического времени
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const baseTime = Math.floor(todayStart.getTime() / 1000);
-    const departureTime = baseTime + sec;
-
-    deps.push({
-      tripId: trip.trip_id,
-      routeId: trip.route_id,
-      routeShort: routeShortName,
-      headsign: trip.trip_headsign || "",
-      stopId: stopId,
-      departureTime: departureTime,
-      source: "GTFS",
+    // Находим stop_times для этой остановки и маршрута
+    const relevantStopTimes = stopTimes.filter(st => {
+      if (st.stop_id !== stopId) return false;
+      
+      const trip = trips.find(t => t.trip_id === st.trip_id);
+      if (!trip) return false;
+      
+      const route = routes[trip.route_id];
+      return route && route.route_short_name === routeShortName;
     });
+    
+    console.log("📊 Найдено stop_times:", relevantStopTimes.length, "для остановки", stopId);
+    
+    for (const st of relevantStopTimes) {
+      const [h, m, s] = (st.departure_time || "00:00:00").split(":").map(Number);
+      const sec = h * 3600 + m * 60 + (s || 0);
+      
+      // Проверяем время (в пределах 2 часов)
+      if (sec < secToday || sec > secToday + DEFAULT_WINDOW_MIN * 60) continue;
+
+      const trip = trips.find(t => t.trip_id === st.trip_id && activeServices.includes(t.service_id));
+      if (!trip) continue;
+      
+      const route = routes[trip.route_id];
+      if (!route || route.route_short_name !== routeShortName) continue;
+
+      // Вычисляем timestamp для статического времени
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const baseTime = Math.floor(todayStart.getTime() / 1000);
+      const departureTime = baseTime + sec;
+
+      deps.push({
+        tripId: trip.trip_id,
+        routeId: trip.route_id,
+        routeShort: routeShortName,
+        headsign: trip.trip_headsign || "",
+        stopId: stopId,
+        departureTime: departureTime,
+        source: "GTFS",
+      });
+    }
   }
 
-  // Сортируем по времени отправления
+  // Сортируем по времени отправления и убираем дубликаты по tripId
   deps.sort((a, b) => a.departureTime - b.departureTime);
   
-  console.log("📋 Финальные отправления:", deps.map(d => ({
+  // Фильтруем дубликаты по tripId (на всякий случай)
+  const uniqueDeps = [];
+  const seenTripIds = new Set();
+  
+  for (const dep of deps) {
+    if (!seenTripIds.has(dep.tripId)) {
+      uniqueDeps.push(dep);
+      seenTripIds.add(dep.tripId);
+    }
+  }
+  
+  console.log("📋 Финальные отправления:", uniqueDeps.map(d => ({
     tripId: d.tripId,
     source: d.source,
     headsign: d.headsign,
@@ -260,7 +270,7 @@ async function collectDepartures(stopId, routeShortName) {
     time: new Date(d.departureTime * 1000).toLocaleTimeString()
   })));
   
-  return deps;
+  return uniqueDeps;
 }
 
 // ---------- Получение алертов через Cloudflare Worker ----------
