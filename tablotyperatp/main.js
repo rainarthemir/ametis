@@ -12,7 +12,7 @@ const RT_ALERT_URL = "https://proxy.transport.data.gouv.fr/resource/ametis-amien
 const DEFAULT_WINDOW_MIN = 120;
 const REFRESH_INTERVAL_MS = 20000;
 
-// ---------- DOM ----------
+
 const lineBadge = document.getElementById("lineBadge");
 const directionTitle = document.getElementById("directionTitle");
 const clock = document.getElementById("clock");
