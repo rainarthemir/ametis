@@ -35,7 +35,7 @@ let protoRoot = null;
 let currentStopId = null;
 
 // ---------- Утилиты ----------
-function logStatus(t) {
+function logStatus() {
   if (statusBox) {
     const now = new Date();
     statusBox.textContent = `Actualisé à ${now.toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'})}`;
@@ -256,6 +256,8 @@ function findStopByName(stopName) {
 
 // ---------- Отрисовка табло ----------
 function renderBoard(deps, alerts, routeShortName, stopName) {
+  console.log("🎨 Rendu du tableau avec:", { deps: deps.length, alerts, routeShortName, stopName });
+
   // Устанавливаем номер линии и цвет
   if (lineBadge) {
     lineBadge.textContent = routeShortName;
@@ -268,50 +270,56 @@ function renderBoard(deps, alerts, routeShortName, stopName) {
     .filter(d => d.minutes !== null && d.minutes >= 0)
     .slice(0, 3);
 
-  // Первое отправление
-  if (firstTimeBig && nextDeps[0]) {
-    const d = nextDeps[0];
-    firstTimeBig.textContent = d.minutes === 0 ? "0" : `${d.minutes}`;
-    
-    if (directionTitle) {
-      directionTitle.textContent = d.headsign || stopName || "Direction inconnue";
-    }
-    
-    // Следующее отправление той же линии
-    const nextSameLine = nextDeps[1];
-    if (firstTimeSmall && nextSameLine) {
-      firstTimeSmall.textContent = `| ${nextSameLine.minutes}`;
-    } else if (firstTimeSmall) {
-      firstTimeSmall.textContent = "";
-    }
+  console.log("📊 Prochains départs:", nextDeps);
 
-    if (d.minutes <= 2) {
-      firstTimeBig.classList.add('soon');
+  // Первое отправление
+  if (firstTimeBig) {
+    if (nextDeps[0]) {
+      const d = nextDeps[0];
+      firstTimeBig.textContent = d.minutes === 0 ? "0" : `${d.minutes}`;
+      
+      if (directionTitle) {
+        directionTitle.textContent = d.headsign || stopName || "Direction inconnue";
+      }
+      
+      // Следующее отправление той же линии
+      const nextSameLine = nextDeps[1];
+      if (firstTimeSmall && nextSameLine) {
+        firstTimeSmall.textContent = `| ${nextSameLine.minutes}`;
+      } else if (firstTimeSmall) {
+        firstTimeSmall.textContent = "";
+      }
+
+      if (d.minutes <= 2) {
+        firstTimeBig.classList.add('soon');
+      } else {
+        firstTimeBig.classList.remove('soon');
+      }
     } else {
+      firstTimeBig.textContent = "--";
+      if (firstTimeSmall) firstTimeSmall.textContent = "";
       firstTimeBig.classList.remove('soon');
+      if (directionTitle) directionTitle.textContent = stopName || "Aucun départ";
     }
-  } else if (firstTimeBig) {
-    firstTimeBig.textContent = "--";
-    if (firstTimeSmall) firstTimeSmall.textContent = "";
-    firstTimeBig.classList.remove('soon');
-    if (directionTitle) directionTitle.textContent = stopName || "Aucun départ";
   }
 
   // Второе отправление
-  if (secondTimeBig && nextDeps[1]) {
-    const d = nextDeps[1];
-    secondTimeBig.textContent = d.minutes === 0 ? "0" : `${d.minutes}`;
-    if (secondTimeSmall) secondTimeSmall.textContent = "";
-    
-    if (d.minutes <= 2) {
-      secondTimeBig.classList.add('soon');
+  if (secondTimeBig) {
+    if (nextDeps[1]) {
+      const d = nextDeps[1];
+      secondTimeBig.textContent = d.minutes === 0 ? "0" : `${d.minutes}`;
+      if (secondTimeSmall) secondTimeSmall.textContent = "";
+      
+      if (d.minutes <= 2) {
+        secondTimeBig.classList.add('soon');
+      } else {
+        secondTimeBig.classList.remove('soon');
+      }
     } else {
+      secondTimeBig.textContent = "--";
+      if (secondTimeSmall) secondTimeSmall.textContent = "";
       secondTimeBig.classList.remove('soon');
     }
-  } else if (secondTimeBig) {
-    secondTimeBig.textContent = "--";
-    if (secondTimeSmall) secondTimeSmall.textContent = "";
-    secondTimeBig.classList.remove('soon');
   }
 
   // Alerts
@@ -340,25 +348,30 @@ async function refreshBoard() {
   const stopParam = params.get("stop") || "Gare d'Amiens";
   const lineParam = params.get("line") || "T1";
   
+  console.log("🔄 Actualisation du tableau:", { stopParam, lineParam });
+  
   try {
     // Находим остановку
     const stop = findStopByName(stopParam);
     if (!stop) {
-      console.error("Остановка не найдена:", stopParam);
+      console.error("❌ Остановка не найдена:", stopParam);
       if (alertBox) alertBox.textContent = `Arrêt "${stopParam}" non trouvé`;
       return;
     }
     
     currentStopId = stop.stop_id;
+    console.log("📍 Arrêt trouvé:", stop.stop_name, "ID:", stop.stop_id);
     
     const [deps, alerts] = await Promise.all([
       collectDepartures(currentStopId, lineParam),
       loadAlerts()
     ]);
     
+    console.log("📦 Données chargées:", { départs: deps.length, alertes: alerts.length });
+    
     renderBoard(deps, alerts, lineParam, stop.stop_name);
   } catch (e) {
-    console.error("Erreur:", e);
+    console.error("❌ Erreur:", e);
     if (alertBox) alertBox.textContent = "Erreur de chargement des données";
   }
 }
@@ -367,6 +380,14 @@ async function refreshBoard() {
 async function init() {
   try {
     console.log("🚀 Initialisation du tableau RATP...");
+    
+    // Провurons que tous les éléments DOM existent
+    const elements = {
+      lineBadge, directionTitle, clock, firstTimeBig, firstTimeSmall, 
+      secondTimeBig, secondTimeSmall, statusBox, alertBox
+    };
+    
+    console.log("🔍 Éléments DOM trouvés:", elements);
     
     await loadGTFS();
     await loadProto();
@@ -391,4 +412,8 @@ async function init() {
 }
 
 // Запуск при загрузке страницы
-document.addEventListener('DOMContentLoaded', init);
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
