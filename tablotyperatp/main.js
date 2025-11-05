@@ -101,12 +101,6 @@ async function loadGTFS() {
       stopTimes: stopTimes.length 
     });
     
-    // Покажем первые 5 остановок для отладки
-    console.log("📋 Примеры остановок:", stops.slice(0, 5).map(s => ({
-      id: s.stop_id,
-      code: s.stop_code,
-      name: s.stop_name
-    })));
   } catch (error) {
     console.error("❌ Ошибка загрузки GTFS:", error);
     throw error;
@@ -145,6 +139,8 @@ async function collectDepartures(stopId, routeShortName) {
   // === RT данные ===
   try {
     const feed = await fetchRTandDecode(RT_TRIP_URL);
+    console.log("📡 RT данные получены, entities:", feed.entity?.length || 0);
+    
     if (feed.entity) {
       for (const e of feed.entity) {
         const tu = e.trip_update;
@@ -156,21 +152,33 @@ async function collectDepartures(stopId, routeShortName) {
         const tripId = trip.trip_id;
         const routeId = trip.route_id;
 
-        // Проверяем маршрут
+        // Проверяем маршрут - ищем по route_id в routes
         const route = routes[routeId];
-        if (!route || route.route_short_name !== routeShortName) continue;
+        if (!route) {
+          console.log("⚠️ Маршрут не найден в GTFS:", routeId);
+          continue;
+        }
+        
+        if (route.route_short_name !== routeShortName) continue;
 
         const stus = tu.stop_time_update || [];
         for (const stu of stus) {
           const stopIdRt = stu.stop_id;
           if (stopIdRt !== stopId) continue;
           
-          const depTs = stu.departure ? Number(stu.departure.time) : null;
+          // Используем departure.time если есть, иначе arrival.time
+          const depObj = stu.departure || stu.arrival;
+          if (!depObj) continue;
+          
+          const depTs = Number(depObj.time);
           if (!depTs || depTs < now || depTs > windowEnd) continue;
 
           // Находим trip для получения headsign
           const tripInfo = trips.find(t => t.trip_id === tripId);
-          if (!tripInfo) continue;
+          if (!tripInfo) {
+            console.log("⚠️ Trip не найден:", tripId);
+            continue;
+          }
 
           deps.push({
             tripId,
@@ -180,6 +188,13 @@ async function collectDepartures(stopId, routeShortName) {
             stopId: stopIdRt,
             departureTime: depTs,
             source: "RT",
+          });
+          
+          console.log("✅ RT отправление:", { 
+            tripId, 
+            headsign: tripInfo.trip_headsign,
+            time: new Date(depTs * 1000).toLocaleTimeString(),
+            minutes: minutesUntil(depTs)
           });
         }
       }
@@ -192,12 +207,24 @@ async function collectDepartures(stopId, routeShortName) {
   const nowObj = new Date();
   const secToday = nowObj.getHours() * 3600 + nowObj.getMinutes() * 60 + nowObj.getSeconds();
   
-  // Находим stop_times для этой остановки
-  const relevantStopTimes = stopTimes.filter(st => st.stop_id === stopId);
+  // Находим stop_times для этой остановки и маршрута
+  const relevantStopTimes = stopTimes.filter(st => {
+    if (st.stop_id !== stopId) return false;
+    
+    const trip = trips.find(t => t.trip_id === st.trip_id);
+    if (!trip) return false;
+    
+    const route = routes[trip.route_id];
+    return route && route.route_short_name === routeShortName;
+  });
+  
+  console.log("📊 Найдено stop_times:", relevantStopTimes.length, "для остановки", stopId);
   
   for (const st of relevantStopTimes) {
     const [h, m, s] = (st.departure_time || "00:00:00").split(":").map(Number);
     const sec = h * 3600 + m * 60 + (s || 0);
+    
+    // Проверяем время (в пределах 2 часов)
     if (sec < secToday || sec > secToday + DEFAULT_WINDOW_MIN * 60) continue;
 
     const trip = trips.find(t => t.trip_id === st.trip_id && activeServices.includes(t.service_id));
@@ -209,19 +236,40 @@ async function collectDepartures(stopId, routeShortName) {
     // Проверяем, нет ли уже этого trip в RT данных
     if (deps.some(d => d.tripId === trip.trip_id)) continue;
 
+    // Вычисляем timestamp для статического времени
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const baseTime = Math.floor(todayStart.getTime() / 1000);
+    const departureTime = baseTime + sec;
+
     deps.push({
       tripId: trip.trip_id,
       routeId: trip.route_id,
       routeShort: routeShortName,
       headsign: trip.trip_headsign || "",
       stopId: stopId,
-      departureTime: Math.floor(now / 86400) * 86400 + sec,
+      departureTime: departureTime,
       source: "GTFS",
+    });
+    
+    console.log("✅ GTFS отправление:", { 
+      tripId: trip.trip_id,
+      headsign: trip.trip_headsign,
+      time: st.departure_time,
+      minutes: minutesUntil(departureTime)
     });
   }
 
   // Сортируем по времени отправления
   deps.sort((a, b) => a.departureTime - b.departureTime);
+  
+  console.log("📋 Все отправления:", deps.map(d => ({
+    source: d.source,
+    headsign: d.headsign,
+    minutes: minutesUntil(d.departureTime),
+    time: new Date(d.departureTime * 1000).toLocaleTimeString()
+  })));
+  
   return deps;
 }
 
@@ -256,17 +304,19 @@ async function loadAlerts() {
 function findStop(identifier) {
   if (!identifier) return null;
   
+  console.log("🔍 Поиск остановки:", identifier);
+  
   // Сначала ищем по stop_id (точное совпадение)
   const byId = stops.find(stop => stop.stop_id === identifier);
   if (byId) {
-    console.log("🔍 Arrêt trouvé par ID:", identifier);
+    console.log("✅ Найдено по ID:", byId.stop_name);
     return byId;
   }
   
   // Затем ищем по stop_code (точное совпадение)
   const byCode = stops.find(stop => stop.stop_code === identifier);
   if (byCode) {
-    console.log("🔍 Arrêt trouvé par code:", identifier);
+    console.log("✅ Найдено по code:", byCode.stop_name);
     return byCode;
   }
   
@@ -277,17 +327,28 @@ function findStop(identifier) {
   );
   
   if (byName) {
-    console.log("🔍 Arrêt trouvé par nom:", identifier);
+    console.log("✅ Найдено по имени:", byName.stop_name);
     return byName;
   }
   
-  console.log("❌ Arrêt non trouvé:", identifier);
+  console.log("❌ Остановка не найдена:", identifier);
+  console.log("📋 Доступные остановки:", stops.slice(0, 5).map(s => ({
+    id: s.stop_id,
+    code: s.stop_code,
+    name: s.stop_name
+  })));
+  
   return null;
 }
 
 // ---------- Отрисовка табло ----------
 function renderBoard(deps, alerts, routeShortName, stopName) {
-  console.log("🎨 Rendu du tableau avec:", { deps: deps.length, alerts, routeShortName, stopName });
+  console.log("🎨 Отрисовка табло:", { 
+    отправлений: deps.length, 
+    уведомлений: alerts.length, 
+    линия: routeShortName, 
+    остановка: stopName 
+  });
 
   // Устанавливаем номер линии и цвет
   if (lineBadge) {
@@ -298,10 +359,10 @@ function renderBoard(deps, alerts, routeShortName, stopName) {
   const now = Math.floor(Date.now() / 1000);
   const nextDeps = deps
     .map(d => ({...d, minutes: minutesUntil(d.departureTime)}))
-    .filter(d => d.minutes !== null && d.minutes >= 0)
+    .filter(d => d.minutes !== null && d.minutes >= 0 && d.minutes <= 120) // Фильтруем реальные времена
     .slice(0, 3);
 
-  console.log("📊 Prochains départs:", nextDeps);
+  console.log("📊 Отфильтрованные отправления:", nextDeps);
 
   // Первое отправление
   if (firstTimeBig) {
@@ -379,20 +440,25 @@ async function refreshBoard() {
   const stopParam = params.get("stop") || params.get("id");
   const lineParam = params.get("line") || params.get("route");
   
-  console.log("🔄 Actualisation du tableau:", { stopParam, lineParam });
+  console.log("🔄 Обновление табло:", { stopParam, lineParam });
+  
+  if (!stopParam || !lineParam) {
+    console.error("❌ Необходимы параметры stop и line");
+    if (alertBox) alertBox.textContent = "Paramètres STOP et LINE requis dans l'URL";
+    return;
+  }
   
   try {
     // Находим остановку
     const stop = findStop(stopParam);
     if (!stop) {
       console.error("❌ Остановка не найдена:", stopParam);
-      console.log("📋 Доступные остановки:", stops.slice(0, 10).map(s => ({ id: s.stop_id, name: s.stop_name, code: s.stop_code })));
       if (alertBox) alertBox.textContent = `Arrêt "${stopParam}" non trouvé`;
       return;
     }
     
     currentStopId = stop.stop_id;
-    console.log("📍 Arrêt trouvé:", { 
+    console.log("📍 Остановка найдена:", { 
       name: stop.stop_name, 
       id: stop.stop_id,
       code: stop.stop_code 
@@ -403,19 +469,14 @@ async function refreshBoard() {
       loadAlerts()
     ]);
     
-    console.log("📦 Données chargées:", { 
-      départs: deps.length, 
-      alertes: alerts.length,
-      départs_details: deps.map(d => ({
-        line: d.routeShort,
-        direction: d.headsign,
-        minutes: minutesUntil(d.departureTime)
-      }))
+    console.log("📦 Данные загружены:", { 
+      отправлений: deps.length, 
+      уведомлений: alerts.length
     });
     
     renderBoard(deps, alerts, lineParam, stop.stop_name);
   } catch (e) {
-    console.error("❌ Erreur:", e);
+    console.error("❌ Ошибка:", e);
     if (alertBox) alertBox.textContent = "Erreur de chargement des données";
   }
 }
@@ -423,7 +484,7 @@ async function refreshBoard() {
 // ---------- Инициализация ----------
 async function init() {
   try {
-    console.log("🚀 Initialisation du tableau RATP...");
+    console.log("🚀 Инициализация табло RATP...");
     
     await loadGTFS();
     await loadProto();
@@ -440,9 +501,9 @@ async function init() {
       refreshBoard();
     }, REFRESH_INTERVAL_MS);
     
-    console.log("✅ Tableau RATP initialisé");
+    console.log("✅ Табло RATP инициализировано");
   } catch (e) {
-    console.error("❌ Erreur d'initialisation:", e);
+    console.error("❌ Ошибка инициализации:", e);
     if (alertBox) alertBox.textContent = "Erreur d'initialisation du système";
   }
 }
