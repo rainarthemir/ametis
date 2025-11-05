@@ -83,7 +83,7 @@ async function loadGTFS() {
       loadCSV(GTFS_BASE + "trips.txt"),
       loadCSV(GTFS_BASE + "stop_times.txt"),
       loadCSV(GTFS_BASE + "calendar.txt").catch(() => []),
-      loadCSV(GTFS_BASE + "calendarDates.txt").catch(() => [])
+      loadCSV(GTFS_BASE + "calendar_dates.txt").catch(() => [])
     ]);
 
     stops = stopsData;
