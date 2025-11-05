@@ -184,8 +184,12 @@ async function collectDepartures(stopId, routeShortName) {
             continue;
           }
 
-          // Проверяем, не обрабатывали ли мы уже этот рейс
-          if (processedTrips.has(tripId)) {
+          // Создаем ключ для проверки дубликатов (время + направление)
+          const duplicateKey = `${depTs}_${tripInfo.trip_headsign}`;
+          
+          // Проверяем, не обрабатывали ли мы уже этот рейс ИЛИ рейс с таким же временем и направлением
+          if (processedTrips.has(tripId) || processedTrips.has(duplicateKey)) {
+            console.log("🚫 Пропускаем дубликат:", { tripId, duplicateKey });
             continue;
           }
 
@@ -200,6 +204,7 @@ async function collectDepartures(stopId, routeShortName) {
           });
           
           processedTrips.add(tripId);
+          processedTrips.add(duplicateKey); // Защита от дубликатов с разными tripId но одинаковым временем+направлением
         }
       }
     }
@@ -237,16 +242,23 @@ async function collectDepartures(stopId, routeShortName) {
     const route = routes[trip.route_id];
     if (!route || route.route_short_name !== routeShortName) continue;
     
-    // Проверяем, нет ли уже этого trip в RT данных
-    if (processedTrips.has(trip.trip_id)) {
-      continue;
-    }
-
     // Вычисляем timestamp для статического времени
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const baseTime = Math.floor(todayStart.getTime() / 1000);
     const departureTime = baseTime + sec;
+
+    // Создаем ключ для проверки дубликатов (время + направление)
+    const duplicateKey = `${departureTime}_${trip.trip_headsign}`;
+    
+    // Проверяем, нет ли уже этого trip в RT данных ИЛИ рейса с таким же временем и направлением
+    if (processedTrips.has(trip.trip_id) || processedTrips.has(duplicateKey)) {
+      console.log("🚫 Пропускаем статический дубликат:", { 
+        tripId: trip.trip_id, 
+        duplicateKey 
+      });
+      continue;
+    }
 
     deps.push({
       tripId: trip.trip_id,
@@ -259,30 +271,20 @@ async function collectDepartures(stopId, routeShortName) {
     });
     
     processedTrips.add(trip.trip_id);
+    processedTrips.add(duplicateKey);
   }
 
-  // Сортируем по времени отправления и убираем дубликаты по tripId
+  // Сортируем по времени отправления
   deps.sort((a, b) => a.departureTime - b.departureTime);
   
-  // Дополнительная фильтрация дубликатов
-  const uniqueDeps = [];
-  const seenTripIds = new Set();
-  
-  for (const dep of deps) {
-    if (!seenTripIds.has(dep.tripId)) {
-      uniqueDeps.push(dep);
-      seenTripIds.add(dep.tripId);
-    }
-  }
-  
-  console.log("📋 Все отправления после фильтрации:", uniqueDeps.map(d => ({
+  console.log("📋 Финальные отправления:", deps.map(d => ({
     source: d.source,
     headsign: d.headsign,
     minutes: minutesUntil(d.departureTime),
     time: new Date(d.departureTime * 1000).toLocaleTimeString()
   })));
   
-  return uniqueDeps;
+  return deps;
 }
 
 // ---------- Получение алертов через Cloudflare Worker ----------
@@ -338,7 +340,6 @@ async function loadAlertsFromWebsite() {
 }
 
 // ---------- Получение цвета линии из GTFS2 ----------
-// ---------- Получение цвета линии из GTFS2 ----------
 function getLineColor(lineNumber) {
   if (!lineNumber) return '#666666'; // Серый по умолчанию
   
@@ -346,6 +347,14 @@ function getLineColor(lineNumber) {
   if (lineData && lineData.route_color) {
     return '#' + lineData.route_color;
   }
+  
+  // Цвета по умолчанию для разных типов линий
+  const defaultColors = {
+    'T1': '#0066CC', 'T2': '#0066CC', // Трамваи - синий
+    'N1': '#993399', 'N2': '#993399', // Ночные - фиолетовый
+    '1': '#FF0000', '2': '#0066CC', '3': '#009900', '4': '#FF6600', '5': '#990099',
+    '6': '#66CC00', '7': '#FFCC00', '8': '#CC0066', '9': '#996633', '10': '#0099CC'
+  };
   
   return defaultColors[lineNumber] || '#666666';
 }
@@ -574,19 +583,10 @@ function renderBoard(deps, alerts, routeShortName, stopName) {
     lineBadge.textContent = routeShortName;
     const lineColor = getLineColor(routeShortName);
     lineBadge.style.background = lineColor;
-  
-  // УДАЛИТЬ этот блок - всегда используем белый текст
-  // Определяем цвет текста в зависимости от яркости фона
-  // const hex = lineColor.replace('#', '');
-  // const r = parseInt(hex.substr(0, 2), 16);
-  // const g = parseInt(hex.substr(2, 2), 16);
-  // const b = parseInt(hex.substr(4, 2), 16);
-  // const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-  // lineBadge.style.color = brightness > 128 ? '#000' : '#fff';
-  
-  // ВМЕСТО этого просто установите белый цвет
-  lineBadge.style.color = '#fff';
-}
+    
+    // Всегда используем белый текст для бейджа линии
+    lineBadge.style.color = '#fff';
+  }
 
   const now = Math.floor(Date.now() / 1000);
   
