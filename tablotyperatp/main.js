@@ -83,7 +83,7 @@ async function loadGTFS() {
       loadCSV(GTFS_BASE + "trips.txt"),
       loadCSV(GTFS_BASE + "stop_times.txt"),
       loadCSV(GTFS_BASE + "calendar.txt").catch(() => []),
-      loadCSV(GTFS_BASE + "calendar_dates.txt").catch(() => []) // Исправлено имя файла
+      loadCSV(GTFS_BASE + "calendarDates.txt").catch(() => [])
     ]);
 
     stops = stopsData;
@@ -145,10 +145,10 @@ function getActiveServiceIds() {
     exceptions.forEach(cd => {
       if (cd.exception_type === '1') {
         addedServices.add(cd.service_id);
-        console.log("➕ Добавлен сервис через calendar_dates:", cd.service_id);
+        console.log("➕ Добавлен сервис:", cd.service_id);
       } else if (cd.exception_type === '2') {
         removedServices.add(cd.service_id);
-        console.log("➖ Удален сервис через calendar_dates:", cd.service_id);
+        console.log("➖ Удален сервис:", cd.service_id);
       }
     });
   } else {
@@ -159,6 +159,7 @@ function getActiveServiceIds() {
   const baseServices = calendar.filter(c => {
     // Проверяем день недели
     if (c[weekday] !== '1') {
+      console.log("🚫 Сервис неактивен сегодня:", c.service_id, "день недели:", weekday);
       return false;
     }
     
@@ -177,12 +178,18 @@ function getActiveServiceIds() {
       endDate.setHours(23, 59, 59, 999); // Конец дня
       
       const isInRange = now >= startDate && now <= endDate;
+      if (!isInRange) {
+        console.log("🚫 Сервис вне диапазона:", c.service_id, "с", c.start_date, "по", c.end_date);
+      }
       return isInRange;
     } catch (e) {
       console.warn("⚠️ Ошибка парсинга дат для сервиса:", c.service_id, e);
       return false;
     }
-  }).map(c => c.service_id);
+  }).map(c => {
+    console.log("✅ Базовый сервис активен:", c.service_id);
+    return c.service_id;
+  });
   
   console.log("📊 Базовые сервисы из calendar:", baseServices.length);
   
@@ -212,11 +219,6 @@ function getActiveServiceIds() {
     итого: result.length
   });
   
-  // Логируем несколько примеров для проверки
-  if (result.length > 0) {
-    console.log("📝 Примеры активных сервисов:", result.slice(0, 5));
-  }
-  
   return result;
 }
 
@@ -228,16 +230,13 @@ async function collectDepartures(stopId, routeShortName) {
   
   let deps = [];
 
-  console.log("🔍 Поиск отправлений для остановки:", stopId, "линия:", routeShortName);
-  console.log("📅 Активных сервисов:", activeServices.length);
-
   // === RT данные (реальное время) ===
   try {
     const feed = await fetchRTandDecode(RT_TRIP_URL);
     console.log("📡 RT данные получены, entities:", feed.entity?.length || 0);
     
     if (feed.entity && feed.entity.length > 0) {
-      const rtTrips = new Set();
+      const rtTrips = new Set(); // Для отслеживания trip'ов из RT
       
       for (const e of feed.entity) {
         const tu = e.trip_update;
@@ -253,16 +252,13 @@ async function collectDepartures(stopId, routeShortName) {
         const route = routes[routeId];
         if (!route || route.route_short_name !== routeShortName) continue;
 
-        // Находим trip для получения service_id
+        // Находим trip для получения headsign и service_id
         const tripInfo = trips.find(t => t.trip_id === tripId);
-        if (!tripInfo) {
-          console.log("❌ Trip не найден в GTFS:", tripId);
-          continue;
-        }
+        if (!tripInfo) continue;
         
-        // ВАЖНО: проверяем активен ли сервис для этого трипа
+        // ВАЖНОЕ ИСПРАВЛЕНИЕ: проверяем, активен ли сервис для этого трипа
         if (!activeServices.includes(tripInfo.service_id)) {
-          console.log("🚫 Пропускаем RT trip - неактивный сервис:", tripId, "service_id:", tripInfo.service_id);
+          console.log("🚫 Пропускаем RT trip - неактивный сервис:", tripId, tripInfo.service_id);
           continue;
         }
 
@@ -271,6 +267,7 @@ async function collectDepartures(stopId, routeShortName) {
           const stopIdRt = stu.stop_id;
           if (stopIdRt !== stopId) continue;
           
+          // Используем departure.time если есть, иначе arrival.time
           const depObj = stu.departure || stu.arrival;
           if (!depObj) continue;
           
@@ -285,7 +282,6 @@ async function collectDepartures(stopId, routeShortName) {
             stopId: stopIdRt,
             departureTime: depTs,
             source: "RT",
-            serviceId: tripInfo.service_id
           });
           
           rtTrips.add(tripId);
@@ -300,8 +296,8 @@ async function collectDepartures(stopId, routeShortName) {
 
   // === Статические данные (теоретическое расписание) ===
   // Используем только если RT данные недоступны или их недостаточно
-  if (deps.length < 2) {
-    console.log("🔄 Дополняем теоретическим расписанием");
+  if (deps.length === 0) {
+    console.log("🔄 Используем теоретическое расписание");
     
     const nowObj = new Date();
     const secToday = nowObj.getHours() * 3600 + nowObj.getMinutes() * 60 + nowObj.getSeconds();
@@ -313,28 +309,23 @@ async function collectDepartures(stopId, routeShortName) {
       const trip = trips.find(t => t.trip_id === st.trip_id);
       if (!trip) return false;
       
-      // ПРОВЕРЯЕМ АКТИВНЫЙ СЕРВИС!
-      if (!activeServices.includes(trip.service_id)) {
-        return false;
-      }
-      
       const route = routes[trip.route_id];
       return route && route.route_short_name === routeShortName;
     });
     
-    console.log("📊 Найдено stop_times с активными сервисами:", relevantStopTimes.length);
+    console.log("📊 Найдено stop_times:", relevantStopTimes.length, "для остановки", stopId);
     
     // Группируем stop_times по времени и направлению
     const timeHeadsignMap = new Map();
     
     for (const st of relevantStopTimes) {
-      const [h, m, s] = (st.departure_time || st.arrival_time || "00:00:00").split(":").map(Number);
+      const [h, m, s] = (st.departure_time || "00:00:00").split(":").map(Number);
       const sec = h * 3600 + m * 60 + (s || 0);
       
       // Проверяем время (в пределах 2 часов)
       if (sec < secToday || sec > secToday + DEFAULT_WINDOW_MIN * 60) continue;
 
-      const trip = trips.find(t => t.trip_id === st.trip_id);
+      const trip = trips.find(t => t.trip_id === st.trip_id && activeServices.includes(t.service_id));
       if (!trip) continue;
       
       const route = routes[trip.route_id];
@@ -361,43 +352,29 @@ async function collectDepartures(stopId, routeShortName) {
           stopId: stopId,
           departureTime: departureTime,
           source: "GTFS",
-          serviceId: trip.service_id
         });
       }
+      // Если уже есть - пропускаем этот trip (не добавляем дубликаты)
     }
     
-    // Преобразуем Map в массив и добавляем к существующим отправлениям
-    const staticDeps = Array.from(timeHeadsignMap.values());
-    console.log("📋 Уникальные теоретические отправления:", staticDeps.length);
+    // Преобразуем Map в массив
+    deps = Array.from(timeHeadsignMap.values());
     
-    // Объединяем с RT отправлениями
-    deps = [...deps, ...staticDeps];
+    console.log("📋 Уникальные теоретические отправления:", deps.length);
   }
 
   // Сортируем по времени отправления
   deps.sort((a, b) => a.departureTime - b.departureTime);
   
-  // Убираем дубликаты по tripId
-  const uniqueDeps = [];
-  const seenTrips = new Set();
-  
-  deps.forEach(dep => {
-    if (!seenTrips.has(dep.tripId)) {
-      seenTrips.add(dep.tripId);
-      uniqueDeps.push(dep);
-    }
-  });
-  
-  console.log("🎯 Финальные отправления:", uniqueDeps.map(d => ({
+  console.log("🎯 Финальные отправления:", deps.map(d => ({
     tripId: d.tripId,
     source: d.source,
-    serviceId: d.serviceId,
     headsign: d.headsign,
     minutes: minutesUntil(d.departureTime),
     time: new Date(d.departureTime * 1000).toLocaleTimeString()
   })));
   
-  return uniqueDeps;
+  return deps;
 }
 
 // ---------- Получение алертов через Cloudflare Worker ----------
