@@ -27,7 +27,6 @@ html, body {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  padding: 20px;
   background: var(--bg);
   position: relative;
 }
@@ -35,40 +34,107 @@ html, body {
 /* Header */
 .header {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
-  margin-bottom: 30px;
-  padding: 0 10px;
+  padding: 20px;
+  height: 15vh;
+  border-bottom: 2px solid #eee;
 }
 
-.line-info {
+.direction-title {
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--black);
+  text-align: center;
+}
+
+/* Main content */
+.main-content {
   display: flex;
+  flex: 1;
+  height: 75vh;
+}
+
+/* Departures section - left half */
+.departures-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+  border-right: 2px solid #eee;
+}
+
+.departures {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  width: 100%;
+  max-width: 300px;
+}
+
+.departure-block {
+  display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 15px;
 }
 
-/* Header */
+.departure-label {
+  font-size: 24px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.time-big {
+  width: 180px;
+  height: 180px;
+  background: var(--black);
+  color: var(--white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 80px;
+  font-weight: 800;
+  border-radius: 8px;
+  transition: background-color 0.3s ease;
+}
+
+.time-small {
+  font-size: 24px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+/* Traffic section - right half */
+.traffic-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+}
+
+.traffic-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
 .line-badge {
-  width: 60px;
-  height: 60px;
-  border-radius: 8px; /* Изменено с 50% на 8px */
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 800;
-  font-size: 24px;
-  color: #fff; /* Изменено на белый */
+  font-size: 28px;
+  color: #fff;
   background: var(--metro-yellow);
   box-shadow: inset 0 -4px 0 rgba(0,0,0,0.2);
   transition: all 0.3s ease;
-}
-
-
-
-.direction-title {
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--black);
 }
 
 .clock {
@@ -77,59 +143,15 @@ html, body {
   color: var(--black);
 }
 
-/* Departures */
-.departures {
-  display: flex;
-  gap: 40px;
-  justify-content: center;
-  align-items: flex-start;
-  margin-bottom: 30px;
-}
-
-.departure-block {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.departure-label {
-  font-size: 18px;
-  color: var(--muted);
-  font-weight: 500;
-}
-
-.time-big {
-  width: 120px;
-  height: 120px;
-  background: var(--black);
-  color: var(--white);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 64px;
-  font-weight: 800;
-  border-radius: 8px;
-  transition: background-color 0.3s ease;
-}
-
-.time-small {
-  font-size: 20px;
-  color: var(--muted);
-  font-weight: 500;
-}
-
 /* Traffic info - улучшенная версия */
 .traffic-info {
   background: var(--white);
   border: 2px solid #ddd;
   border-radius: 12px;
   padding: 20px;
-  margin: 20px 0;
   flex: 1;
   display: flex;
   align-items: flex-start;
-  min-height: 120px;
   position: relative;
   font-size: 18px;
   line-height: 1.5;
@@ -139,14 +161,14 @@ html, body {
 .alert-line-badge {
   position: absolute;
   top: 15px;
-  right: 15px;
+  left: 15px; /* Изменено с right на left */
   width: 40px;
   height: 40px;
-  border-radius: 8px; /* Изменено с 8px на 4px для более квадратной формы */
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white; /* Убедитесь что цвет белый */
+  color: white;
   font-weight: 800;
   font-size: 18px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
@@ -155,7 +177,7 @@ html, body {
 /* Контент алерта */
 .alert-content {
   flex: 1;
-  padding-right: 50px; /* Место для бейджа */
+  padding-left: 50px; /* Место для бейджа слева */
 }
 
 .alert-title {
@@ -248,26 +270,51 @@ html, body {
   100% { background-color: var(--metro-red); }
 }
 
+/* Status */
+.status {
+  height: 10vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-top: 2px solid #eee;
+  padding: 10px;
+}
+
+.status div {
+  font-size: 16px;
+  color: var(--muted);
+}
+
 /* Mobile responsiveness */
 @media (max-width: 768px) {
-  .departures {
-    gap: 20px;
+  .main-content {
+    flex-direction: column;
+  }
+  
+  .departures-section {
+    border-right: none;
+    border-bottom: 2px solid #eee;
+    height: 50%;
+  }
+  
+  .traffic-section {
+    height: 50%;
   }
   
   .time-big {
-    width: 100px;
-    height: 100px;
-    font-size: 48px;
+    width: 140px;
+    height: 140px;
+    font-size: 60px;
   }
   
   .direction-title {
-    font-size: 22px;
+    font-size: 28px;
   }
   
   .line-badge {
-    width: 50px;
-    height: 50px;
-    font-size: 20px;
+    width: 60px;
+    height: 60px;
+    font-size: 22px;
   }
   
   .alert-text {
@@ -276,7 +323,6 @@ html, body {
   
   .traffic-info {
     padding: 15px;
-    min-height: 100px;
     font-size: 16px;
   }
   
@@ -285,7 +331,7 @@ html, body {
     height: 35px;
     font-size: 16px;
     top: 12px;
-    right: 12px;
+    left: 12px;
   }
   
   .alert-title {
@@ -301,29 +347,27 @@ html, body {
   }
   
   .alert-content {
-    padding-right: 45px;
+    padding-left: 45px;
   }
 }
 
 @media (max-width: 480px) {
   .ratp-board {
-    padding: 15px;
+    padding: 0;
   }
   
   .departures {
-    flex-direction: column;
-    align-items: center;
-    gap: 15px;
+    gap: 20px;
   }
   
   .time-big {
-    width: 80px;
-    height: 80px;
-    font-size: 36px;
+    width: 120px;
+    height: 120px;
+    font-size: 50px;
   }
   
   .direction-title {
-    font-size: 18px;
+    font-size: 22px;
   }
   
   .clock {
@@ -336,7 +380,6 @@ html, body {
   
   .traffic-info {
     padding: 12px;
-    min-height: 90px;
     font-size: 15px;
   }
   
@@ -359,7 +402,7 @@ html, body {
   }
   
   .alert-content {
-    padding-right: 40px;
+    padding-left: 40px;
   }
 }
 
