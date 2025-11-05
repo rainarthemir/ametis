@@ -34,6 +34,11 @@ let calendarDates = [];
 let protoRoot = null;
 let currentStopId = null;
 
+// ---------- Карусель алертов ----------
+let currentAlertIndex = 0;
+let alertCarouselInterval = null;
+let currentAlerts = [];
+
 // ---------- Утилиты ----------
 function logStatus() {
   if (statusBox) {
@@ -308,12 +313,88 @@ async function loadAlertsFromWebsite() {
     
   } catch (error) {
     console.error("❌ Ошибка загрузки алертов через Worker:", error);
-    // Возвращаем структуру по умолчанию при ошибке
     return { 
       'en_cours': [], 
       'a_venir': [] 
     };
   }
+}
+
+// ---------- Очистка текста алерта ----------
+function cleanAlertText(text) {
+  if (!text) return '';
+  
+  return text
+    // Заменяем HTML-entities
+    .replace(/&#039;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    // Убираем множественные переносы строк и пробелы
+    .replace(/\n\s*\n/g, '\n') // Убираем пустые строки
+    .replace(/\s+/g, ' ') // Заменяем множественные пробелы на один
+    .trim();
+}
+
+// ---------- Форматирование сообщения алерта ----------
+function formatAlertMessage(alert) {
+  if (!alert.message) return '';
+  
+  const cleanMessage = cleanAlertText(alert.message);
+  const lineInfo = alert.line_number ? `Ligne ${alert.line_number} - ` : '';
+  
+  // Разделяем сообщение на части по переносам строк
+  const parts = cleanMessage.split('\n').filter(part => part.trim());
+  
+  if (parts.length <= 2) {
+    // Если сообщение короткое, показываем полностью
+    return `${lineInfo}${cleanMessage}`;
+  } else {
+    // Если длинное, берем первую строку как заголовок, остальное как описание
+    const title = parts[0];
+    const description = parts.slice(1).join(' ');
+    // Ограничиваем длину описания
+    const shortDescription = description.length > 150 
+      ? description.substring(0, 147) + '...' 
+      : description;
+    
+    return `${lineInfo}${title} - ${shortDescription}`;
+  }
+}
+
+// ---------- Запуск карусели алертов ----------
+function startAlertCarousel(alerts) {
+  // Останавливаем предыдущую карусель
+  if (alertCarouselInterval) {
+    clearInterval(alertCarouselInterval);
+    alertCarouselInterval = null;
+  }
+  
+  currentAlerts = alerts;
+  currentAlertIndex = 0;
+  
+  // Если алертов нет или только один, не запускаем карусель
+  if (!currentAlerts.length || currentAlerts.length <= 1) {
+    if (alertBox && currentAlerts.length === 1) {
+      alertBox.textContent = currentAlerts[0];
+    }
+    return;
+  }
+  
+  // Показываем первый алерт
+  if (alertBox) {
+    alertBox.textContent = currentAlerts[0];
+  }
+  
+  // Запускаем карусель - переключаем каждые 8 секунд
+  alertCarouselInterval = setInterval(() => {
+    currentAlertIndex = (currentAlertIndex + 1) % currentAlerts.length;
+    if (alertBox) {
+      alertBox.textContent = currentAlerts[currentAlertIndex];
+    }
+  }, 8000);
 }
 
 // ---------- Обновленная функция загрузки алертов ----------
@@ -328,21 +409,23 @@ async function loadAlerts() {
     // Добавляем текущие алерты (en_cours)
     if (websiteAlerts.en_cours && websiteAlerts.en_cours.length > 0) {
       websiteAlerts.en_cours.forEach(alert => {
-        if (alert.message && alert.message.trim()) {
-          const lineInfo = alert.line_number ? `Ligne ${alert.line_number} - ` : '';
-          // Заменяем переносы строк на пробелы для лучшего отображения
-          const cleanMessage = alert.message.replace(/\n/g, ' ').trim();
-          displayAlerts.push(`${lineInfo}${cleanMessage}`);
+        const formattedMessage = formatAlertMessage(alert);
+        if (formattedMessage) {
+          displayAlerts.push(formattedMessage);
         }
       });
     }
     
-    // Добавляем предстоящие алерты (a_venir)
+    // Добавляем предстоящие алерты (a_venir), исключая "Aucune perturbation"
     if (websiteAlerts.a_venir && websiteAlerts.a_venir.length > 0) {
       websiteAlerts.a_venir.forEach(alert => {
-        if (alert.message && alert.message.trim()) {
-          const cleanMessage = alert.message.replace(/\n/g, ' ').trim();
-          displayAlerts.push(`[À venir] ${cleanMessage}`);
+        if (alert.message && 
+            !alert.message.includes("Aucune perturbation de ligne à venir") &&
+            !alert.message.includes("Aucune perturbation")) {
+          const formattedMessage = formatAlertMessage(alert);
+          if (formattedMessage) {
+            displayAlerts.push(`[À venir] ${formattedMessage}`);
+          }
         }
       });
     }
@@ -352,16 +435,8 @@ async function loadAlerts() {
       return ["Trafic normal sur toutes les lignes"];
     }
     
-    // Ограничиваем длину сообщений для лучшего отображения
-    const formattedAlerts = displayAlerts.map(alert => {
-      if (alert.length > 200) {
-        return alert.substring(0, 197) + '...';
-      }
-      return alert;
-    });
-    
-    console.log("🔔 Алерты для отображения:", formattedAlerts);
-    return formattedAlerts;
+    console.log("🔔 Алерты для отображения:", displayAlerts);
+    return displayAlerts;
     
   } catch (error) {
     console.warn("⚠️ Ошибка загрузки алертов:", error);
@@ -482,9 +557,14 @@ function renderBoard(deps, alerts, routeShortName, stopName) {
   // Alerts
   if (alertBox) {
     if (alerts.length > 0 && alerts[0] !== "Trafic normal sur toutes les lignes") {
-      alertBox.textContent = alerts[0];
-      console.log("🔔 Alert отображен:", alerts[0]);
+      // Запускаем карусель алертов
+      startAlertCarousel(alerts);
     } else {
+      // Останавливаем карусель если она была запущена
+      if (alertCarouselInterval) {
+        clearInterval(alertCarouselInterval);
+        alertCarouselInterval = null;
+      }
       alertBox.textContent = "Trafic normal sur toutes les lignes";
     }
   }
