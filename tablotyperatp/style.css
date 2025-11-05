@@ -56,18 +56,29 @@ html, body {
 }
 
 .direction-title {
-  font-size: 36px;
+  font-size: 42px; /* Было 36px */
   font-weight: 700;
   color: var(--black);
   text-align: center;
   flex: 1;
 }
 
+.time-big {
+    font-size: 100px; /* Было 80px */
+  }
+
 .clock {
   font-size: 28px;
-  font-weight: 300;
-  color: var(--black);
-  width: 80px;
+  font-weight: 700;
+  color: #FFD700; /* Золотой цвет */
+  background: #000000; /* Черный фон */
+  padding: 10px 15px;
+  border-radius: 8px;
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 
 /* Main content */
@@ -385,4 +396,21 @@ html, body {
 /* Loading state */
 .time-big:empty::before {
   content: "--";
+}
+
+@media (max-width: 480px) {
+  .direction-title {
+    font-size: 28px; /* Было 22px */
+  }
+  
+  .time-big {
+    font-size: 80px; /* Было 60px */
+  }
+  
+  .clock {
+    top: 10px;
+    right: 10px;
+    font-size: 20px;
+    padding: 6px 10px;
+  }
 }
