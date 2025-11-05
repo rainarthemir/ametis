@@ -100,6 +100,13 @@ async function loadGTFS() {
       trips: trips.length, 
       stopTimes: stopTimes.length 
     });
+    
+    // Покажем первые 5 остановок для отладки
+    console.log("📋 Примеры остановок:", stops.slice(0, 5).map(s => ({
+      id: s.stop_id,
+      code: s.stop_code,
+      name: s.stop_name
+    })));
   } catch (error) {
     console.error("❌ Ошибка загрузки GTFS:", error);
     throw error;
@@ -245,13 +252,37 @@ async function loadAlerts() {
   }
 }
 
-// ---------- Поиск остановки по имени ----------
-function findStopByName(stopName) {
-  if (!stopName) return null;
-  const normalized = stopName.toLowerCase().trim();
-  return stops.find(stop => 
+// ---------- Поиск остановки по ID или имени ----------
+function findStop(identifier) {
+  if (!identifier) return null;
+  
+  // Сначала ищем по stop_id (точное совпадение)
+  const byId = stops.find(stop => stop.stop_id === identifier);
+  if (byId) {
+    console.log("🔍 Arrêt trouvé par ID:", identifier);
+    return byId;
+  }
+  
+  // Затем ищем по stop_code (точное совпадение)
+  const byCode = stops.find(stop => stop.stop_code === identifier);
+  if (byCode) {
+    console.log("🔍 Arrêt trouvé par code:", identifier);
+    return byCode;
+  }
+  
+  // Затем ищем по имени (частичное совпадение)
+  const normalized = identifier.toLowerCase().trim();
+  const byName = stops.find(stop => 
     stop.stop_name && stop.stop_name.toLowerCase().includes(normalized)
   );
+  
+  if (byName) {
+    console.log("🔍 Arrêt trouvé par nom:", identifier);
+    return byName;
+  }
+  
+  console.log("❌ Arrêt non trouvé:", identifier);
+  return null;
 }
 
 // ---------- Отрисовка табло ----------
@@ -345,29 +376,42 @@ function updateClockUI() {
 // ---------- Основная функция обновления ----------
 async function refreshBoard() {
   const params = new URLSearchParams(location.search);
-  const stopParam = params.get("stop") || "Gare d'Amiens";
-  const lineParam = params.get("line") || "T1";
+  const stopParam = params.get("stop") || params.get("id") || "Gare d'Amiens";
+  const lineParam = params.get("line") || params.get("route") || "T1";
   
   console.log("🔄 Actualisation du tableau:", { stopParam, lineParam });
   
   try {
     // Находим остановку
-    const stop = findStopByName(stopParam);
+    const stop = findStop(stopParam);
     if (!stop) {
       console.error("❌ Остановка не найдена:", stopParam);
+      console.log("📋 Доступные остановки:", stops.slice(0, 10).map(s => ({ id: s.stop_id, name: s.stop_name, code: s.stop_code })));
       if (alertBox) alertBox.textContent = `Arrêt "${stopParam}" non trouvé`;
       return;
     }
     
     currentStopId = stop.stop_id;
-    console.log("📍 Arrêt trouvé:", stop.stop_name, "ID:", stop.stop_id);
+    console.log("📍 Arrêt trouvé:", { 
+      name: stop.stop_name, 
+      id: stop.stop_id,
+      code: stop.stop_code 
+    });
     
     const [deps, alerts] = await Promise.all([
       collectDepartures(currentStopId, lineParam),
       loadAlerts()
     ]);
     
-    console.log("📦 Données chargées:", { départs: deps.length, alertes: alerts.length });
+    console.log("📦 Données chargées:", { 
+      départs: deps.length, 
+      alertes: alerts.length,
+      départs_details: deps.map(d => ({
+        line: d.routeShort,
+        direction: d.headsign,
+        minutes: minutesUntil(d.departureTime)
+      }))
+    });
     
     renderBoard(deps, alerts, lineParam, stop.stop_name);
   } catch (e) {
@@ -380,14 +424,6 @@ async function refreshBoard() {
 async function init() {
   try {
     console.log("🚀 Initialisation du tableau RATP...");
-    
-    // Провurons que tous les éléments DOM existent
-    const elements = {
-      lineBadge, directionTitle, clock, firstTimeBig, firstTimeSmall, 
-      secondTimeBig, secondTimeSmall, statusBox, alertBox
-    };
-    
-    console.log("🔍 Éléments DOM trouvés:", elements);
     
     await loadGTFS();
     await loadProto();
