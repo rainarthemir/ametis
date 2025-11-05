@@ -1,5 +1,5 @@
 // ---------------------
-// main.js
+// main.js - RATP Style Board
 // ---------------------
 
 // ---------- НАСТРОЙКИ ----------
@@ -39,6 +39,7 @@ function logStatus(t, err = false) {
   statusBox.textContent = t;
   statusBox.style.color = err ? "#b22" : "inherit";
 }
+
 function utcSecondsToLocalTimeStr(ts) {
   if (!ts || isNaN(ts)) return "—";
   return new Date(ts * 1000).toLocaleTimeString("fr-FR", {
@@ -47,11 +48,13 @@ function utcSecondsToLocalTimeStr(ts) {
     minute: "2-digit",
   });
 }
+
 function minutesUntil(ts) {
   if (!ts) return null;
   const now = Math.floor(Date.now() / 1000);
   return Math.max(0, Math.round((ts - now) / 60));
 }
+
 async function loadCSV(p) {
   const r = await fetch(p);
   if (!r.ok) throw new Error("Ошибка загрузки " + p + " (" + r.status + ")");
@@ -71,11 +74,13 @@ function normalizeNameForGroup(name) {
     .toLowerCase();
   return s.replace(/\b(arrêt|station)\b/gi, "").trim();
 }
+
 function detectPlatformFromName(name) {
   if (!name) return null;
   const m = name.match(/\b(?:Quai|Voie|Platform|Plateforme)\b[^\w]*([A-Z0-9]+)\b/i) || name.match(/\b([A-Z0-9])\b$/);
   return m ? (m[1] || m[0]).toString() : null;
 }
+
 function buildMergedStops() {
   mergedStops = {};
   for (const s of stops) {
@@ -99,6 +104,7 @@ function buildMergedStops() {
 async function loadProto() {
   protoRoot = await protobuf.load(PROTO_PATH);
 }
+
 async function fetchRTandDecode() {
   if (!protoRoot) throw new Error("protoRoot не загружен");
   const r = await fetch(RT_URL);
@@ -134,12 +140,10 @@ async function loadGTFS() {
   console.log("✅ GTFS загружен:", { stops: stops.length, trips: trips.length, stopTimes: stopTimes.length });
 }
 
-// ---------- Сбор отправлений (использован твой код почти без изменений) ----------
+// ---------- Сбор отправлений ----------
 async function collectDeparturesForMergedKey(keyOrStopId, platformFilterVal, windowMinutes) {
-  // keyOrStopId может быть merged-key или реальным stop_id
   let key = keyOrStopId;
   if (!mergedStops[key]) {
-    // попробуем найти merged-key, если передан stop_id
     for (const k of Object.keys(mergedStops)) {
       if (mergedStops[k].memberStopIds.includes(String(keyOrStopId))) {
         key = k;
@@ -181,11 +185,9 @@ async function collectDeparturesForMergedKey(keyOrStopId, platformFilterVal, win
           }
           if (platformFilterVal && String(pf) !== String(platformFilterVal)) continue;
 
-          // headsign из trips.txt
           const tripRow = trips.find((t) => t.trip_id === tripId);
           const headsign = tripRow ? tripRow.trip_headsign || "" : "";
 
-          // Цвет — по route_short_name из GTFS2
           const routeShort = trip.route_short_name || trip.routeShortName || tripRow?.route_short_name;
           const routeColor =
             (routes2ByShort[routeShort]?.route_color && "#" + routes2ByShort[routeShort].route_color) || "#333";
@@ -208,7 +210,7 @@ async function collectDeparturesForMergedKey(keyOrStopId, platformFilterVal, win
     console.warn("⚠️ RT error:", e.message);
   }
 
-  // === STATIC (добавляем всё, что не покрыто RT) ===
+  // === STATIC ===
   const nowObj = new Date();
   const secToday = nowObj.getHours() * 3600 + nowObj.getMinutes() * 60 + nowObj.getSeconds();
   const weekday = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][nowObj.getDay()];
@@ -222,7 +224,7 @@ async function collectDeparturesForMergedKey(keyOrStopId, platformFilterVal, win
 
     const trip = trips.find((t) => t.trip_id === st.trip_id && activeServices.includes(t.service_id));
     if (!trip) continue;
-    if (rtTrips.has(trip.trip_id)) continue; // не дублируем RT-трип
+    if (rtTrips.has(trip.trip_id)) continue;
 
     const routeShort = trip.route_short_name;
     const color =
@@ -245,131 +247,168 @@ async function collectDeparturesForMergedKey(keyOrStopId, platformFilterVal, win
   return deps;
 }
 
-// ---------- UI / LOGIC: чтение параметров URL и рендер табло ----------
+// ---------- UI / LOGIC: чтение параметров URL ----------
 const params = new URLSearchParams(location.search);
 const idParam = params.get("id") || params.get("stop") || params.get("key");
 const lineParam = params.get("line") || params.get("route") || params.get("r");
 
-// Функция: найти merged key по входному param (или вернуть null)
 function resolveMergedKey(param) {
   if (!param) return null;
-  if (mergedStops[param]) return param; // уже merged-key
-  // если param равен stop_id
+  if (mergedStops[param]) return param;
   for (const k of Object.keys(mergedStops)) {
     if (mergedStops[k].memberStopIds.includes(String(param))) return k;
   }
-  // пробуем найти по частичному совпадению в baseName
   for (const k of Object.keys(mergedStops)) {
     if (mergedStops[k].baseName.toLowerCase().includes(String(param).toLowerCase())) return k;
   }
   return null;
 }
 
+// ---------- Отрисовка табло в стиле РАТП ----------
 function renderBoardFromDeps(mergedKey, deps, preferredLine) {
-  // Заголовок станции
   if (mergedKey && mergedStops[mergedKey]) {
     stopTitle.textContent = mergedStops[mergedKey].baseName;
   } else {
     stopTitle.textContent = idParam || "—";
   }
 
-  // Фильтрация по линии (если задан)
   let filtered = deps;
   if (preferredLine) {
-    filtered = deps.filter((d) => String(d.routeShort) === String(preferredLine) || String(d.routeId) === String(preferredLine));
+    filtered = deps.filter((d) => 
+      String(d.routeShort) === String(preferredLine) || 
+      String(d.routeId) === String(preferredLine)
+    );
   }
 
-  // Если фильтр обнулил, покажем предупреждение
-  if (preferredLine && filtered.length === 0) {
-    alertBox.textContent = `Нет отправлений для линии "${preferredLine}" в текущем окне времени.`;
-  } else {
-    alertBox.textContent = "";
-  }
-
-  // Показываем 2 ближайших
   const now = Math.floor(Date.now() / 1000);
   const next = filtered
     .map(d => ({...d, minutes: minutesUntil(d.departureTime)}))
     .filter(d => d.minutes !== null && d.minutes >= 0)
     .sort((a,b) => a.departureTime - b.departureTime)
-    .slice(0, 5); // возьмём несколько, но отобразим 2
+    .slice(0, 5);
 
-  // Заполнение первого/второго
-  function fillSlot(slotIndex, slotElementBig, slotElementSmall) {
-    const d = next[slotIndex];
-    if (!d) {
-      slotElementBig.textContent = "--";
-      slotElementSmall.textContent = "—";
-      return;
+  // Первое отправление
+  if (next[0]) {
+    const d = next[0];
+    firstTimeBig.textContent = d.minutes === 0 ? "0" : `${d.minutes}`;
+    
+    // Ищем следующее отправление той же линии
+    const nextSameLine = filtered
+      .filter(x => x.routeShort === d.routeShort && x.departureTime > d.departureTime)
+      .sort((a,b) => a.departureTime - b.departureTime)[0];
+    
+    if (nextSameLine) {
+      const nextMinutes = minutesUntil(nextSameLine.departureTime);
+      firstTimeSmall.textContent = `| ${nextMinutes}`;
+    } else {
+      firstTimeSmall.textContent = "";
     }
-    // большой — минуты (или "à l'instant")
-    slotElementBig.textContent = d.minutes === 0 ? "À l'instant" : `${d.minutes} min`;
-    // малый — направление + абсолютное время
-    const tAbs = utcSecondsToLocalTimeStr(d.departureTime);
-    slotElementSmall.textContent = `${d.headsign || d.routeShort || d.routeId} • ${tAbs}`;
-    // поменяем бейдж цвета и direction
+
     lineBadge.style.background = d.color || "#f2c100";
     lineBadge.textContent = d.routeShort || d.routeId || "—";
     directionTitle.textContent = d.headsign || "";
+    
+    // Подсветка если меньше 2 минут
+    if (d.minutes <= 2) {
+      firstTimeBig.classList.add('soon');
+    } else {
+      firstTimeBig.classList.remove('soon');
+    }
+  } else {
+    firstTimeBig.textContent = "--";
+    firstTimeSmall.textContent = "";
+    firstTimeBig.classList.remove('soon');
+    lineBadge.textContent = "—";
+    directionTitle.textContent = "—";
   }
 
-  fillSlot(0, firstTimeBig, firstTimeSmall);
-  fillSlot(1, secondTimeBig, secondTimeSmall);
+  // Второе отправление (следующая линия)
+  if (next[1]) {
+    const d = next[1];
+    secondTimeBig.textContent = d.minutes === 0 ? "0" : `${d.minutes}`;
+    secondTimeSmall.textContent = "";
+    
+    if (d.minutes <= 2) {
+      secondTimeBig.classList.add('soon');
+    } else {
+      secondTimeBig.classList.remove('soon');
+    }
+  } else {
+    secondTimeBig.textContent = "--";
+    secondTimeSmall.textContent = "";
+    secondTimeBig.classList.remove('soon');
+  }
 
-  // статус
-  logStatus(`Найдено отправлений: ${deps.length} (после фильтра: ${filtered.length})`);
+  // Статус
+  const nowTime = new Date();
+  statusBox.textContent = `Actualisé à ${nowTime.toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'})}`;
+  
+  // Уведомления
+  if (filtered.length === 0 && preferredLine) {
+    alertBox.textContent = `Aucun départ pour la ligne "${preferredLine}" dans les prochaines ${DEFAULT_WINDOW_MIN} minutes.`;
+  } else {
+    alertBox.textContent = "";
+  }
 }
 
-// Основная функция: загружает и обновляет табло
+// ---------- Обновление часов ----------
+function updateClockUI() {
+  const now = new Date();
+  clock.textContent = now.toLocaleTimeString('fr-FR', { 
+    hour: '2-digit', 
+    minute: '2-digit',
+    hour12: false 
+  });
+}
+
+// ---------- Основная функция обновления ----------
 async function refreshBoard() {
   if (!idParam) {
-    logStatus("Параметр id не задан в URL (пример: ?id=nom-de-la-station или ?id=12345)", true);
+    logStatus("Paramètre id manquant dans l'URL (ex: ?id=nom-de-la-station ou ?id=12345)", true);
     return;
   }
+  
   const mergedKey = resolveMergedKey(idParam);
   if (!mergedKey) {
-    // если не нашли merged-key, попробуем считать, что idParam — stop_id, и всё равно вызовем collect
-    console.warn("Merged key не найден, попытаемся использовать как stop_id:", idParam);
+    console.warn("Clé merged non trouvée, tentative avec stop_id:", idParam);
   }
 
   try {
-    logStatus("Загружаю отправления...");
+    logStatus("Chargement des départs...");
     pendingFetchPromise = collectDeparturesForMergedKey(mergedKey || idParam, "", 120);
     const deps = await pendingFetchPromise;
     renderBoardFromDeps(mergedKey, deps, lineParam);
   } catch (e) {
-    logStatus("Ошибка: " + e.message, true);
+    logStatus("Erreur: " + e.message, true);
     console.error(e);
   } finally {
     pendingFetchPromise = null;
   }
 }
 
-// clock update
-function updateClockUI() {
-  const now = new Date();
-  clock.textContent = now.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-}
-setInterval(updateClockUI, 1000);
-updateClockUI();
-
 // ---------- Инициализация ----------
 async function init() {
   try {
     await loadGTFS();
     await loadProto();
-    logStatus("Готово — загружаю табло...");
+    logStatus("Prêt - chargement du tableau...");
 
-    // первый рендер
+    // Первый рендер
     await refreshBoard();
 
-    // интервал автообновления
+    // Часы
+    setInterval(updateClockUI, 1000);
+    updateClockUI();
+
+    // Автообновление
     setInterval(() => {
       refreshBoard();
     }, REFRESH_INTERVAL_MS);
   } catch (e) {
-    logStatus("Ошибка инициализации: " + e.message, true);
+    logStatus("Erreur d'initialisation: " + e.message, true);
     console.error(e);
   }
 }
+
+// Запуск
 init();
