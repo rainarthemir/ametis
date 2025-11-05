@@ -12,7 +12,6 @@ const RT_ALERT_URL = "https://proxy.transport.data.gouv.fr/resource/ametis-amien
 const DEFAULT_WINDOW_MIN = 120;
 const REFRESH_INTERVAL_MS = 20000;
 
-
 const lineBadge = document.getElementById("lineBadge");
 const directionTitle = document.getElementById("directionTitle");
 const clock = document.getElementById("clock");
@@ -84,7 +83,7 @@ async function loadGTFS() {
       loadCSV(GTFS_BASE + "trips.txt"),
       loadCSV(GTFS_BASE + "stop_times.txt"),
       loadCSV(GTFS_BASE + "calendar.txt").catch(() => []),
-      loadCSV(GTFS_BASE + "calendar_dates.txt").catch(() => [])
+      loadCSV(GTFS_BASE + "calendarDates.txt").catch(() => [])
     ]);
 
     stops = stopsData;
@@ -103,7 +102,9 @@ async function loadGTFS() {
       stops: stops.length, 
       routes: routesData.length,
       trips: trips.length, 
-      stopTimes: stopTimes.length 
+      stopTimes: stopTimes.length,
+      calendar: calendar.length,
+      calendarDates: calendarDates.length
     });
     
   } catch (error) {
@@ -112,25 +113,113 @@ async function loadGTFS() {
   }
 }
 
+// ---------- Fallback функция если calendar недоступен ----------
+function getAllServiceIds() {
+  const allServices = new Set();
+  trips.forEach(t => allServices.add(t.service_id));
+  return Array.from(allServices);
+}
+
 // ---------- Поиск активных сервисов ----------
 function getActiveServiceIds() {
   const now = new Date();
   const today = now.toISOString().slice(0, 10).replace(/-/g, '');
   const weekday = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][now.getDay()];
   
-  // Проверяем calendar_dates на исключения
-  const exceptions = calendarDates.filter(cd => cd.date === today);
-  const addedServices = new Set(exceptions.filter(cd => cd.exception_type === '1').map(cd => cd.service_id));
-  const removedServices = new Set(exceptions.filter(cd => cd.exception_type === '2').map(cd => cd.service_id));
+  console.log("📅 Поиск активных сервисов для:", { today, weekday });
+  
+  // Если calendar не загружен, возвращаем все сервисы
+  if (!calendar || calendar.length === 0) {
+    console.log("⚠️ calendar не загружен - предполагаем что все сервисы активны");
+    return getAllServiceIds();
+  }
+  
+  const addedServices = new Set();
+  const removedServices = new Set();
+  
+  // Обрабатываем calendar_dates если доступен
+  if (calendarDates && calendarDates.length > 0) {
+    const exceptions = calendarDates.filter(cd => cd.date === today);
+    console.log("📋 Исключения на сегодня:", exceptions.length);
+    
+    exceptions.forEach(cd => {
+      if (cd.exception_type === '1') {
+        addedServices.add(cd.service_id);
+        console.log("➕ Добавлен сервис:", cd.service_id);
+      } else if (cd.exception_type === '2') {
+        removedServices.add(cd.service_id);
+        console.log("➖ Удален сервис:", cd.service_id);
+      }
+    });
+  } else {
+    console.log("ℹ️ calendar_dates не загружен или пуст");
+  }
   
   // Базовые сервисы из calendar
-  const baseServices = calendar.filter(c => c[weekday] === '1').map(c => c.service_id);
+  const baseServices = calendar.filter(c => {
+    // Проверяем день недели
+    if (c[weekday] !== '1') {
+      console.log("🚫 Сервис неактивен сегодня:", c.service_id, "день недели:", weekday);
+      return false;
+    }
+    
+    // Проверяем период действия
+    try {
+      const startDate = new Date(
+        parseInt(c.start_date.slice(0,4)),
+        parseInt(c.start_date.slice(4,6)) - 1,
+        parseInt(c.start_date.slice(6,8))
+      );
+      const endDate = new Date(
+        parseInt(c.end_date.slice(0,4)),
+        parseInt(c.end_date.slice(4,6)) - 1,
+        parseInt(c.end_date.slice(6,8))
+      );
+      endDate.setHours(23, 59, 59, 999); // Конец дня
+      
+      const isInRange = now >= startDate && now <= endDate;
+      if (!isInRange) {
+        console.log("🚫 Сервис вне диапазона:", c.service_id, "с", c.start_date, "по", c.end_date);
+      }
+      return isInRange;
+    } catch (e) {
+      console.warn("⚠️ Ошибка парсинга дат для сервиса:", c.service_id, e);
+      return false;
+    }
+  }).map(c => {
+    console.log("✅ Базовый сервис активен:", c.service_id);
+    return c.service_id;
+  });
   
-  // Применяем исключения
-  const activeServices = new Set(baseServices.filter(s => !removedServices.has(s)));
-  addedServices.forEach(s => activeServices.add(s));
+  console.log("📊 Базовые сервисы из calendar:", baseServices.length);
   
-  return Array.from(activeServices);
+  // Объединяем результаты
+  const activeServices = new Set();
+  
+  // Добавляем базовые сервисы, кроме удаленных
+  baseServices.forEach(s => {
+    if (!removedServices.has(s)) {
+      activeServices.add(s);
+    } else {
+      console.log("🚫 Базовый сервис удален через calendar_dates:", s);
+    }
+  });
+  
+  // Добавляем сервисы из исключений
+  addedServices.forEach(s => {
+    activeServices.add(s);
+    console.log("✅ Сервис добавлен через calendar_dates:", s);
+  });
+  
+  const result = Array.from(activeServices);
+  console.log("🎯 Итоговые активные сервисы:", { 
+    базовые: baseServices.length,
+    добавлено: addedServices.size,
+    удалено: removedServices.size,
+    итого: result.length
+  });
+  
+  return result;
 }
 
 // ---------- Сбор отправлений ----------
@@ -571,7 +660,6 @@ function findStop(identifier) {
 }
 
 // ---------- Отрисовка табло ----------
-// ---------- Отрисовка табло ----------
 function renderBoard(deps, alerts, routeShortName, stopName) {
   console.log("🎨 Отрисовка табло:", { 
     отправлений: deps.length, 
@@ -607,8 +695,6 @@ function renderBoard(deps, alerts, routeShortName, stopName) {
       if (directionTitle) {
         directionTitle.textContent = d.headsign || stopName || "Direction inconnue";
       }
-      
-      // Убрали логику с добавлением класса 'soon' для красного цвета
     } else {
       firstTimeBig.textContent = "--";
       if (directionTitle) directionTitle.textContent = stopName || "Aucun départ";
@@ -620,8 +706,6 @@ function renderBoard(deps, alerts, routeShortName, stopName) {
     if (nextDeps[1]) {
       const d = nextDeps[1];
       secondTimeBig.textContent = d.minutes === 0 ? "0" : `${d.minutes}`;
-      
-      // Убрали логику с добавлением класса 'soon' для красного цвета
     } else {
       secondTimeBig.textContent = "--";
     }
@@ -646,7 +730,7 @@ function renderBoard(deps, alerts, routeShortName, stopName) {
 
   logStatus();
 }
-// ---------- Обновление часов ----------
+
 // ---------- Обновление часов ----------
 function updateClockUI() {
   if (clock) {
