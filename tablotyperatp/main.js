@@ -37,6 +37,7 @@ let currentStopId = null;
 let currentAlertIndex = 0;
 let alertCarouselInterval = null;
 let currentAlerts = [];
+let previousAlertsHash = null; // Для сравнения алертов
 
 // ---------- Утилиты ----------
 function logStatus() {
@@ -581,10 +582,15 @@ function cleanAlertText(text) {
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&nbsp;/g, ' ')
-    // Заменяем множественные переносы строк на одинарные
-    .replace(/\n\s*\n/g, '\n')
-    // Убираем множественные пробелы
-    .replace(/\s+/g, ' ')
+    // Заменяем обратные слеши с n на настоящие переносы строк
+    .replace(/\\n/g, '\n')
+    // Убираем множественные пробелы и табы
+    .replace(/[ \t]+/g, ' ')
+    // Разделяем на строки и очищаем каждую
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0) // Убираем пустые строки
+    .join('\n')
     .trim();
 }
 
@@ -710,6 +716,18 @@ function createAlertHTML(alertData) {
 
 // ---------- Запуск карусели алертов ----------
 function startAlertCarousel(alerts) {
+  // Создаем хэш текущих алертов для сравнения
+  const currentAlertsHash = JSON.stringify(alerts);
+  
+  // Если алерты не изменились, не перезапускаем карусель
+  if (currentAlertsHash === previousAlertsHash) {
+    console.log("🔔 Алерты не изменились, сохраняем карусель");
+    return;
+  }
+  
+  // Сохраняем новый хэш
+  previousAlertsHash = currentAlertsHash;
+  
   // Останавливаем предыдущую карусель
   if (alertCarouselInterval) {
     clearInterval(alertCarouselInterval);
