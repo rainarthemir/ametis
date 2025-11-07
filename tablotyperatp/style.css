@@ -82,7 +82,6 @@ html, body {
   display: flex;
   flex: 1;
   height: 75vh;
-  min-height: 0; /* Важно для flex-контейнера */
 }
 
 /* Departures - merged black section on left */
@@ -140,25 +139,18 @@ html, body {
   display: flex;
   flex-direction: column;
   padding: 30px;
-  height: 100%; /* Добавляем */
-  min-height: 0; /* Важно для flex-контейнера */
 }
 
-/* Traffic info - ИСПРАВЛЕННЫЙ СТИЛЬ */
+/* Traffic info - возвращаем компактный вид */
 .traffic-info {
   background: var(--white);
   border: 2px solid #ddd;
   border-radius: 12px;
   padding: 25px;
-  flex: 1;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
   position: relative;
-  font-size: 18px;
-  line-height: 1.5;
-  height: 100%; /* Добавляем */
-  min-height: 0; /* Важно для flex-контейнера */
 }
 
 /* Групповые бейджи линий */
@@ -167,77 +159,69 @@ html, body {
   flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 20px;
-  width: 100%;
 }
 
 /* Бейдж линии */
 .alert-line-badge {
-  width: 70px; /* Увеличено */
-  height: 70px; /* Увеличено */
+  width: 50px;
+  height: 50px;
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
   font-weight: 800;
-  font-size: 32px; /* Увеличено */
+  font-size: 22px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
-/* Контент алерта - РАСШИРЕННЫЙ */
+/* Контент алерта */
 .alert-content {
   flex: 1;
-  width: 100%;
   display: flex;
   flex-direction: column;
-  justify-content: center; /* Центрируем по вертикали */
-  min-height: 0; /* Важно для flex-контейнера */
 }
 
-/* Первая строка - ЖИРНАЯ и БОЛЬШАЯ (увеличена) */
+/* Первая строка */
 .alert-title {
   font-weight: 800;
-  font-size: 42px; /* Увеличено */
+  font-size: 24px;
   color: var(--black);
-  margin-bottom: 20px;
+  margin-bottom: 12px;
   line-height: 1.2;
 }
 
 /* Вторая строка - чуть меньше и серого цвета */
 .alert-subtitle {
   font-weight: 600;
-  font-size: 32px; /* Увеличено */
+  font-size: 20px;
   color: #666;
-  margin-bottom: 20px;
+  margin-bottom: 10px;
   line-height: 1.3;
 }
 
-/* Остальное сообщение - больше второй строки но меньше первой, черный цвет */
+/* Остальное сообщение */
 .alert-description {
-  font-size: 36px; /* Увеличено */
+  font-size: 18px;
   color: var(--black);
   line-height: 1.4;
   white-space: pre-line;
 }
 
-/* Сообщение о нормальном трафике - увеличенное */
+/* Сообщение о нормальном трафике */
 .alert-normal {
-  font-size: 32px; /* Увеличено */
+  font-size: 20px;
   color: #666;
   text-align: center;
   width: 100%;
   padding: 40px 0;
   font-weight: 500;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
 }
 
 /* Индикатор прогресса карусели */
 .alert-progress {
   position: absolute;
-  bottom: 10px;
+  bottom: 15px;
   left: 0;
   right: 0;
   display: flex;
@@ -319,40 +303,32 @@ html, body {
   
   .traffic-section {
     padding: 20px;
-    height: auto;
   }
   
   .traffic-info {
     padding: 20px;
-    font-size: 16px;
   }
   
   .alert-line-badge {
-    width: 55px;
-    height: 55px;
-    font-size: 24px;
+    width: 45px;
+    height: 45px;
+    font-size: 20px;
   }
   
   .alert-title {
-    font-size: 32px;
+    font-size: 22px;
   }
   
   .alert-subtitle {
-    font-size: 26px;
+    font-size: 18px;
   }
   
   .alert-description {
-    font-size: 28px;
+    font-size: 16px;
   }
   
   .alert-normal {
-    font-size: 26px;
-    padding: 30px 0;
-  }
-  
-  .alert-line-badges {
-    gap: 6px;
-    margin-bottom: 15px;
+    font-size: 18px;
   }
 }
 
@@ -389,57 +365,33 @@ html, body {
   }
   
   .traffic-info {
-    padding: 20px;
-    font-size: 15px;
+    padding: 15px;
   }
   
   .alert-line-badge {
-    width: 50px;
-    height: 50px;
-    font-size: 22px;
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
   }
   
   .alert-title {
-    font-size: 28px;
+    font-size: 20px;
   }
   
   .alert-subtitle {
-    font-size: 22px;
+    font-size: 16px;
   }
   
   .alert-description {
-    font-size: 24px;
+    font-size: 15px;
   }
   
   .alert-normal {
-    font-size: 22px;
-    padding: 25px 0;
-  }
-  
-  .alert-line-badges {
-    gap: 5px;
-    margin-bottom: 12px;
+    font-size: 16px;
   }
 }
 
 /* Loading state */
 .time-big:empty::before {
   content: "--";
-}
-
-@media (max-width: 480px) {
-  .direction-title {
-    font-size: 28px;
-  }
-  
-  .time-big {
-    font-size: 80px;
-  }
-  
-  .clock {
-    top: 10px;
-    right: 10px;
-    font-size: 20px;
-    padding: 6px 10px;
-  }
 }
