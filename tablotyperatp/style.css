@@ -56,19 +56,18 @@ html, body {
 }
 
 .direction-title {
-  font-size: 42px; /* Было 36px */
+  font-size: 42px;
   font-weight: 700;
   color: var(--black);
   text-align: center;
   flex: 1;
 }
 
-
 .clock {
   font-size: 28px;
   font-weight: 700;
-  color: #FFD700; /* Золотой цвет */
-  background: #000000; /* Черный фон */
+  color: #FFD700;
+  background: #000000;
   padding: 10px 15px;
   border-radius: 8px;
   position: absolute;
@@ -245,26 +244,6 @@ html, body {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Colors for different lines */
-.line-M1 { background: #ffcd00 !important; }
-.line-M2 { background: #006cb8 !important; color: white !important; }
-.line-M3 { background: #9b9938 !important; color: white !important; }
-.line-M4 { background: #c04191 !important; color: white !important; }
-.line-M5 { background: #f28e42 !important; }
-.line-M6 { background: #84c791 !important; }
-.line-M7 { background: #f3a4ba !important; }
-.line-M8 { background: #c5a3cd !important; }
-.line-M9 { background: #cec92b !important; }
-.line-M10 { background: #e0b03c !important; }
-.line-M11 { background: #8d5e2a !important; color: white !important; }
-.line-M12 { background: #00814f !important; color: white !important; }
-.line-M13 { background: #98d4e2 !important; }
-.line-M14 { background: #662483 !important; color: white !important; }
-.line-T1 { background: #006cb8 !important; color: white !important; }
-.line-T2 { background: #006cb8 !important; color: white !important; }
-.line-BUS { background: #6e6e6e !important; color: white !important; }
-
-/* Remove pulse animation since we don't want red color */
 /* Status */
 .status {
   height: 10vh;
@@ -407,11 +386,11 @@ html, body {
 
 @media (max-width: 480px) {
   .direction-title {
-    font-size: 28px; /* Было 22px */
+    font-size: 28px;
   }
   
   .time-big {
-    font-size: 80px; /* Было 60px */
+    font-size: 80px;
   }
   
   .clock {
