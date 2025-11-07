@@ -150,17 +150,24 @@ html, body {
   padding: 25px;
   flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
   position: relative;
   font-size: 18px;
   line-height: 1.5;
 }
 
-/* Бейдж линии в левом верхнем углу алерта */
+/* Групповые бейджи линий */
+.alert-line-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 15px;
+  width: 100%;
+}
+
+/* Бейдж линии */
 .alert-line-badge {
-  position: absolute;
-  top: 15px;
-  left: 15px;
   width: 40px;
   height: 40px;
   border-radius: 8px;
@@ -176,7 +183,7 @@ html, body {
 /* Контент алерта */
 .alert-content {
   flex: 1;
-  padding-left: 50px; /* Место для бейджа слева */
+  width: 100%;
 }
 
 .alert-title {
@@ -330,8 +337,9 @@ html, body {
     font-size: 18px;
   }
   
-  .alert-content {
-    padding-left: 45px;
+  .alert-line-badges {
+    gap: 6px;
+    margin-bottom: 12px;
   }
 }
 
@@ -386,8 +394,9 @@ html, body {
     font-size: 16px;
   }
   
-  .alert-content {
-    padding-left: 40px;
+  .alert-line-badges {
+    gap: 5px;
+    margin-bottom: 10px;
   }
 }
 
