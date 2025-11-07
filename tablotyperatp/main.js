@@ -433,7 +433,7 @@ async function collectDepartures(stopId, routeShortName) {
 
     const headsign = trip.trip_headsign || "";
     
-    // Создаем ключ: время + направление
+    // Создаем ключ: время + направлению
     const key = `${sec}_${headsign}`;
     
     // Если для этого времени и направления еще нет trip'а, добавляем
@@ -542,38 +542,31 @@ async function loadAlertsFromWebsite() {
   }
 }
 
-// ---------- Получение цвета линии из GTFS2 ----------
-function getLineColor(lineNumber) {
-  if (!lineNumber) return '#666666'; // Серый по умолчанию
+// ---------- Получение номера линии из line_id ----------
+function getLineNumberFromId(lineId) {
+  if (!lineId) return null;
   
+  // Извлекаем часть между AMI- и следующим -
+  const match = lineId.match(/AMI-([^-]+)-/);
+  if (match && match[1]) {
+    return match[1]; // Возвращаем как есть: L, 5A, 5B, N2 и т.д.
+  }
+  
+  return null;
+}
+
+// ---------- Получение цвета линии ТОЛЬКО из GTFS2 ----------
+function getLineColor(lineNumber) {
+  if (!lineNumber) return '#666666';
+  
+  // Ищем в GTFS2 по полному номеру линии (L, 5A, 5B, N2 и т.д.)
   const lineData = routes2ByShort[lineNumber];
   if (lineData && lineData.route_color) {
     return '#' + lineData.route_color;
   }
   
-  // Цвета по умолчанию для разных типов линий
-  const defaultColors = {
-    'T1': '#0066CC', 'T2': '#0066CC', // Трамваи - синий
-    'N1': '#993399', 'N2': '#993399', 'N3': '#993399', 'N4': '#993399', // Ночные - фиолетовый
-    '1': '#FF0000', '2': '#0066CC', '3': '#009900', '4': '#FF6600', '5': '#990099',
-    '6': '#66CC00', '7': '#FFCC00', '8': '#CC0066', '9': '#996633', '10': '#0099CC',
-    '12': '#FF6699'
-  };
-  
-  return defaultColors[lineNumber] || '#666666';
-}
-
-// ---------- Получение номера линии из line_id ----------
-function getLineNumberFromId(lineId) {
-  if (!lineId) return null;
-  
-  // Ищем паттерн AMI-XXX- где XXX - номер линии
-  const match = lineId.match(/AMI-([^-]+)-/);
-  if (match && match[1]) {
-    return match[1];
-  }
-  
-  return null;
+  // Если не нашли в GTFS2, используем серый по умолчанию
+  return '#666666';
 }
 
 // ---------- Очистка текста алерта с поддержкой HTML ----------
@@ -603,7 +596,9 @@ function groupAlerts(alerts) {
     if (!alert.message) return;
     
     const cleanMessage = cleanAlertText(alert.message);
-    const lineNumber = alert.line_number || getLineNumberFromId(alert.line_id);
+    
+    // Всегда используем line_id для получения номера линии
+    const lineNumber = getLineNumberFromId(alert.line_id);
     
     if (!cleanMessage) return;
     
@@ -624,7 +619,7 @@ function groupAlerts(alerts) {
     // Добавляем номер линии если он есть
     if (lineNumber) {
       group.lineNumbers.add(lineNumber);
-      // Сохраняем цвет для этой линии
+      // Сохраняем цвет для этой линии ТОЛЬКО из GTFS2
       const lineColor = getLineColor(lineNumber);
       group.lineColors.set(lineNumber, lineColor);
     }
@@ -634,15 +629,20 @@ function groupAlerts(alerts) {
   });
   
   // Преобразуем в массив для отображения
-  return Array.from(grouped.values()).map(group => ({
-    message: group.message,
-    lineNumbers: Array.from(group.lineNumbers),
-    lineColors: Array.from(group.lineColors.entries()),
-    // Для обратной совместимости оставляем первый номер линии
-    lineNumber: group.lineNumbers.size > 0 ? Array.from(group.lineNumbers)[0] : null,
-    lineColor: group.lineColors.size > 0 ? Array.from(group.lineColors.values())[0] : '#666666',
-    count: group.originalAlerts.length
-  }));
+  return Array.from(grouped.values()).map(group => {
+    const lineNumbers = Array.from(group.lineNumbers);
+    const lineColors = Array.from(group.lineColors.entries());
+    
+    return {
+      message: group.message,
+      lineNumbers: lineNumbers,
+      lineColors: lineColors,
+      // Для обратной совместимости оставляем первый номер линии
+      lineNumber: lineNumbers.length > 0 ? lineNumbers[0] : null,
+      lineColor: lineColors.length > 0 ? lineColors[0][1] : '#666666',
+      count: group.originalAlerts.length
+    };
+  });
 }
 
 // ---------- Форматирование сообщения алерта ----------
@@ -685,7 +685,10 @@ function createAlertHTML(alertData) {
   // Создаем бейджи для всех линий
   const lineBadgesHTML = alertData.lineNumbers && alertData.lineNumbers.length > 0 
     ? alertData.lineNumbers.map((lineNumber, index) => {
-        const lineColor = alertData.lineColors.find(([num]) => num === lineNumber)?.[1] || getLineColor(lineNumber);
+        // Находим правильный цвет для этой линии
+        const lineColorEntry = alertData.lineColors.find(([num]) => num === lineNumber);
+        const lineColor = lineColorEntry ? lineColorEntry[1] : getLineColor(lineNumber);
+        
         return `<div class="alert-line-badge" style="background: ${lineColor}">${lineNumber}</div>`;
       }).join('')
     : '';
