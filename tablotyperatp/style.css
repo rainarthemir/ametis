@@ -188,7 +188,7 @@ html, body {
 /* Первая строка - ЖИРНАЯ и БОЛЬШАЯ (увеличена в 2 раза) */
 .alert-title {
   font-weight: 800; /* Более жирный */
-  font-size: 40px; /* Было 20px - увеличен в 2 раза */
+  font-size: 35px; /* Было 20px - увеличен в 2 раза */
   color: var(--black);
   margin-bottom: 15px;
   line-height: 1.2;
@@ -197,7 +197,7 @@ html, body {
 /* Вторая строка - чуть меньше и серого цвета */
 .alert-subtitle {
   font-weight: 600;
-  font-size: 32px; /* Меньше чем заголовок, но больше чем описание */
+  font-size: 25px; /* Меньше чем заголовок, но больше чем описание */
   color: #666; /* Серый цвет */
   margin-bottom: 12px;
   line-height: 1.3;
@@ -205,7 +205,7 @@ html, body {
 
 /* Остальное сообщение - больше второй строки но меньше первой, черный цвет */
 .alert-description {
-  font-size: 36px; /* Больше чем subtitle, но меньше чем title */
+  font-size: 30px; /* Больше чем subtitle, но меньше чем title */
   color: var(--black); /* Черный цвет */
   line-height: 1.4;
   white-space: pre-line;
