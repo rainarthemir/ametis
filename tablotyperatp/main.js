@@ -652,6 +652,7 @@ function groupAlerts(alerts) {
 }
 
 // ---------- Форматирование сообщения алерта ----------
+// ---------- Форматирование сообщения алерта ----------
 function formatAlertMessage(alert) {
   if (!alert.message) return null;
   
@@ -663,21 +664,28 @@ function formatAlertMessage(alert) {
   const parts = cleanMessage.split('\n').filter(part => part.trim());
   
   let title = '';
+  let subtitle = '';
   let description = '';
   
   if (parts.length === 1) {
     // Если только одна часть
     title = parts[0];
-  } else if (parts.length >= 2) {
-    // Первая строка - заголовок, остальные - описание
+  } else if (parts.length === 2) {
+    // Две части: первая - заголовок, вторая - описание
     title = parts[0];
-    description = parts.slice(1).join('\n');
+    description = parts[1];
+  } else if (parts.length >= 3) {
+    // Три и более частей: первая - заголовок, вторая - подзаголовок, остальные - описание
+    title = parts[0];
+    subtitle = parts[1];
+    description = parts.slice(2).join('\n');
   }
   
   return {
     lineNumbers: lineNumbers,
     lineColors: lineColors,
     title: title,
+    subtitle: subtitle,
     description: description,
     fullMessage: cleanMessage,
     count: alert.count || 1
@@ -688,7 +696,7 @@ function formatAlertMessage(alert) {
 function createAlertHTML(alertData) {
   if (!alertData) return '';
   
-  // Создаем бейджи для всех линий
+  // Создаем бейджи для всех линий (увеличены в 1.5 раза)
   const lineBadgesHTML = alertData.lineNumbers && alertData.lineNumbers.length > 0 
     ? alertData.lineNumbers.map((lineNumber, index) => {
         // Находим правильный цвет для этой линии
@@ -702,6 +710,9 @@ function createAlertHTML(alertData) {
   const titleHTML = alertData.title ? 
     `<div class="alert-title">${alertData.title}</div>` : '';
   
+  const subtitleHTML = alertData.subtitle ? 
+    `<div class="alert-subtitle">${alertData.subtitle}</div>` : '';
+  
   const descriptionHTML = alertData.description ? 
     `<div class="alert-description">${alertData.description}</div>` : '';
   
@@ -709,6 +720,7 @@ function createAlertHTML(alertData) {
     ${lineBadgesHTML ? `<div class="alert-line-badges">${lineBadgesHTML}</div>` : ''}
     <div class="alert-content">
       ${titleHTML}
+      ${subtitleHTML}
       ${descriptionHTML}
     </div>
   `;
