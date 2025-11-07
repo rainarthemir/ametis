@@ -82,6 +82,7 @@ html, body {
   display: flex;
   flex: 1;
   height: 75vh;
+  min-height: 0; /* Важно для flex-контейнера */
 }
 
 /* Departures - merged black section on left */
@@ -139,9 +140,11 @@ html, body {
   display: flex;
   flex-direction: column;
   padding: 30px;
+  height: 100%; /* Добавляем */
+  min-height: 0; /* Важно для flex-контейнера */
 }
 
-/* Traffic info */
+/* Traffic info - ИСПРАВЛЕННЫЙ СТИЛЬ */
 .traffic-info {
   background: var(--white);
   border: 2px solid #ddd;
@@ -154,9 +157,11 @@ html, body {
   position: relative;
   font-size: 18px;
   line-height: 1.5;
+  height: 100%; /* Добавляем */
+  min-height: 0; /* Важно для flex-контейнера */
 }
 
-/* Групповые бейджи линий - УВЕЛИЧЕНЫ в 1.5 раза */
+/* Групповые бейджи линий */
 .alert-line-badges {
   display: flex;
   flex-wrap: wrap;
@@ -165,60 +170,68 @@ html, body {
   width: 100%;
 }
 
-/* Бейдж линии - УВЕЛИЧЕН в 1.5 раза */
+/* Бейдж линии */
 .alert-line-badge {
-  width: 60px; /* Было 40px */
-  height: 60px; /* Было 40px */
+  width: 70px; /* Увеличено */
+  height: 70px; /* Увеличено */
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
   font-weight: 800;
-  font-size: 27px; /* Было 18px */
+  font-size: 32px; /* Увеличено */
   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
-/* Контент алерта */
+/* Контент алерта - РАСШИРЕННЫЙ */
 .alert-content {
   flex: 1;
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center; /* Центрируем по вертикали */
+  min-height: 0; /* Важно для flex-контейнера */
 }
 
-/* Первая строка - ЖИРНАЯ и БОЛЬШАЯ (увеличена в 2 раза) */
+/* Первая строка - ЖИРНАЯ и БОЛЬШАЯ (увеличена) */
 .alert-title {
-  font-weight: 800; /* Более жирный */
-  font-size: 35px; /* Было 20px - увеличен в 2 раза */
+  font-weight: 800;
+  font-size: 42px; /* Увеличено */
   color: var(--black);
-  margin-bottom: 15px;
+  margin-bottom: 20px;
   line-height: 1.2;
 }
 
 /* Вторая строка - чуть меньше и серого цвета */
 .alert-subtitle {
   font-weight: 600;
-  font-size: 25px; /* Меньше чем заголовок, но больше чем описание */
-  color: #666; /* Серый цвет */
-  margin-bottom: 12px;
+  font-size: 32px; /* Увеличено */
+  color: #666;
+  margin-bottom: 20px;
   line-height: 1.3;
 }
 
 /* Остальное сообщение - больше второй строки но меньше первой, черный цвет */
 .alert-description {
-  font-size: 30px; /* Больше чем subtitle, но меньше чем title */
-  color: var(--black); /* Черный цвет */
+  font-size: 36px; /* Увеличено */
+  color: var(--black);
   line-height: 1.4;
   white-space: pre-line;
 }
 
-/* Сообщение о нормальном трафике */
+/* Сообщение о нормальном трафике - увеличенное */
 .alert-normal {
-  font-size: 20px;
+  font-size: 32px; /* Увеличено */
   color: #666;
   text-align: center;
   width: 100%;
-  padding: 20px 0;
+  padding: 40px 0;
   font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
 }
 
 /* Индикатор прогресса карусели */
@@ -304,31 +317,37 @@ html, body {
     font-size: 22px;
   }
   
+  .traffic-section {
+    padding: 20px;
+    height: auto;
+  }
+  
   .traffic-info {
     padding: 20px;
     font-size: 16px;
   }
   
   .alert-line-badge {
-    width: 45px; /* Адаптивный размер для мобильных */
-    height: 45px;
-    font-size: 20px;
+    width: 55px;
+    height: 55px;
+    font-size: 24px;
   }
   
   .alert-title {
-    font-size: 28px; /* Адаптивный размер для мобильных */
+    font-size: 32px;
   }
   
   .alert-subtitle {
-    font-size: 24px; /* Адаптивный размер для мобильных */
+    font-size: 26px;
   }
   
   .alert-description {
-    font-size: 26px; /* Адаптивный размер для мобильных */
+    font-size: 28px;
   }
   
   .alert-normal {
-    font-size: 18px;
+    font-size: 26px;
+    padding: 30px 0;
   }
   
   .alert-line-badges {
@@ -365,31 +384,36 @@ html, body {
     font-size: 20px;
   }
   
-  .traffic-info {
+  .traffic-section {
     padding: 15px;
+  }
+  
+  .traffic-info {
+    padding: 20px;
     font-size: 15px;
   }
   
   .alert-line-badge {
-    width: 40px; /* Адаптивный размер для маленьких экранов */
-    height: 40px;
-    font-size: 18px;
+    width: 50px;
+    height: 50px;
+    font-size: 22px;
   }
   
   .alert-title {
-    font-size: 24px; /* Адаптивный размер для маленьких экранов */
+    font-size: 28px;
   }
   
   .alert-subtitle {
-    font-size: 20px; /* Адаптивный размер для маленьких экранов */
+    font-size: 22px;
   }
   
   .alert-description {
-    font-size: 22px; /* Адаптивный размер для маленьких экранов */
+    font-size: 24px;
   }
   
   .alert-normal {
-    font-size: 16px;
+    font-size: 22px;
+    padding: 25px 0;
   }
   
   .alert-line-badges {
