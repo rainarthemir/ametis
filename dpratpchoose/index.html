@@ -32,7 +32,7 @@
         
         .container {
             width: 100%;
-            max-width: 600px;
+            max-width: 700px;
             background: white;
             border-radius: 16px;
             box-shadow: var(--shadow);
@@ -71,6 +71,67 @@
             color: var(--dark);
         }
         
+        .search-container {
+            position: relative;
+        }
+        
+        input[type="text"] {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.3s;
+            background-color: white;
+        }
+        
+        input[type="text"]:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(74, 111, 165, 0.2);
+        }
+        
+        .search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #e1e8ed;
+            border-radius: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 10;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            display: none;
+        }
+        
+        .search-result-item {
+            padding: 12px 16px;
+            cursor: pointer;
+            border-bottom: 1px solid #f1f5f9;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .search-result-item:hover {
+            background-color: #f8fafc;
+        }
+        
+        .stop-name {
+            font-weight: 500;
+        }
+        
+        .trip-headsign {
+            color: var(--primary);
+            font-size: 0.9rem;
+            background: #f1f5f9;
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin-left: 10px;
+        }
+        
         select {
             width: 100%;
             padding: 14px 16px;
@@ -96,6 +157,14 @@
             margin-top: 8px;
             font-size: 14px;
             color: #64748b;
+        }
+        
+        .selected-info {
+            margin-top: 16px;
+            padding: 12px 16px;
+            background: #f8fafc;
+            border-radius: 8px;
+            border-left: 4px solid var(--primary);
         }
         
         .button-container {
@@ -171,6 +240,16 @@
             h1 {
                 font-size: 1.5rem;
             }
+            
+            .search-result-item {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .trip-headsign {
+                margin-left: 0;
+                margin-top: 5px;
+            }
         }
     </style>
 </head>
@@ -188,11 +267,12 @@
             </div>
             
             <div class="form-group">
-                <label for="stopSelect">Остановка:</label>
-                <select id="stopSelect">
-                    <option value="">-- Выберите остановку --</option>
-                </select>
-                <div class="info-text" id="stopInfo"></div>
+                <label for="stopSearch">Поиск остановки:</label>
+                <div class="search-container">
+                    <input type="text" id="stopSearch" placeholder="Введите название остановки...">
+                    <div class="search-results" id="searchResults"></div>
+                </div>
+                <div class="selected-info" id="stopInfo" style="display: none;"></div>
             </div>
             
             <div class="form-group">
@@ -200,7 +280,7 @@
                 <select id="lineSelect" disabled>
                     <option value="">-- Сначала выберите остановку --</option>
                 </select>
-                <div class="info-text" id="lineInfo"></div>
+                <div class="selected-info" id="lineInfo" style="display: none;"></div>
             </div>
             
             <div class="button-container">
@@ -215,7 +295,8 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            const stopSelect = document.getElementById('stopSelect');
+            const stopSearch = document.getElementById('stopSearch');
+            const searchResults = document.getElementById('searchResults');
             const lineSelect = document.getElementById('lineSelect');
             const goButton = document.getElementById('goButton');
             const stopInfo = document.getElementById('stopInfo');
@@ -226,6 +307,7 @@
             let routesData = [];
             let tripsData = [];
             let stopTimesData = [];
+            let selectedStopId = null;
             
             // Загрузка данных
             async function loadData() {
@@ -252,7 +334,6 @@
                     const stopTimesText = await stopTimesResponse.text();
                     stopTimesData = parseCSV(stopTimesText);
                     
-                    populateStopSelect();
                     loading.style.display = 'none';
                 } catch (error) {
                     console.error('Ошибка загрузки данных:', error);
@@ -282,35 +363,85 @@
                 return result;
             }
             
-            // Заполнение выпадающего списка остановок
-            function populateStopSelect() {
-                stopsData.forEach(stop => {
-                    const option = document.createElement('option');
-                    option.value = stop.stop_id;
-                    option.textContent = stop.stop_name;
-                    stopSelect.appendChild(option);
-                });
+            // Получение trip headsign для остановки
+            function getTripHeadsignForStop(stopId) {
+                // Находим первый trip_id для этой остановки
+                const stopTime = stopTimesData.find(st => st.stop_id === stopId);
+                if (!stopTime) return null;
+                
+                // Находим trip по trip_id
+                const trip = tripsData.find(t => t.trip_id === stopTime.trip_id);
+                return trip ? trip.trip_headsign : null;
             }
             
-            // Обработчик выбора остановки
-            stopSelect.addEventListener('change', function() {
-                const selectedStopId = this.value;
+            // Обработчик ввода в поле поиска
+            stopSearch.addEventListener('input', function() {
+                const searchTerm = this.value.toLowerCase().trim();
                 
-                if (!selectedStopId) {
-                    lineSelect.disabled = true;
-                    lineSelect.innerHTML = '<option value="">-- Сначала выберите остановку --</option>';
-                    stopInfo.textContent = '';
-                    updateGoButton();
+                if (searchTerm.length < 2) {
+                    searchResults.style.display = 'none';
                     return;
                 }
                 
-                // Находим выбранную остановку
-                const selectedStop = stopsData.find(stop => stop.stop_id === selectedStopId);
-                stopInfo.textContent = `Остановка: ${selectedStop.stop_name}`;
+                // Фильтруем остановки по введенному тексту
+                const filteredStops = stopsData.filter(stop => 
+                    stop.stop_name.toLowerCase().includes(searchTerm)
+                ).slice(0, 10); // Ограничиваем до 10 результатов
                 
+                // Очищаем предыдущие результаты
+                searchResults.innerHTML = '';
+                
+                if (filteredStops.length === 0) {
+                    const noResults = document.createElement('div');
+                    noResults.className = 'search-result-item';
+                    noResults.textContent = 'Остановки не найдены';
+                    noResults.style.cursor = 'default';
+                    searchResults.appendChild(noResults);
+                } else {
+                    // Добавляем найденные остановки в результаты поиска
+                    filteredStops.forEach(stop => {
+                        const resultItem = document.createElement('div');
+                        resultItem.className = 'search-result-item';
+                        
+                        const stopName = document.createElement('span');
+                        stopName.className = 'stop-name';
+                        stopName.textContent = stop.stop_name;
+                        
+                        const tripHeadsign = document.createElement('span');
+                        tripHeadsign.className = 'trip-headsign';
+                        tripHeadsign.textContent = getTripHeadsignForStop(stop.stop_id) || 'Нет данных';
+                        
+                        resultItem.appendChild(stopName);
+                        resultItem.appendChild(tripHeadsign);
+                        
+                        resultItem.addEventListener('click', function() {
+                            stopSearch.value = stop.stop_name;
+                            selectedStopId = stop.stop_id;
+                            searchResults.style.display = 'none';
+                            
+                            // Показываем информацию о выбранной остановке
+                            stopInfo.style.display = 'block';
+                            stopInfo.innerHTML = `
+                                <strong>Выбранная остановка:</strong> ${stop.stop_name}
+                                <br><strong>Направление:</strong> ${tripHeadsign.textContent}
+                            `;
+                            
+                            // Загружаем доступные линии для этой остановки
+                            loadLinesForStop(stop.stop_id);
+                        });
+                        
+                        searchResults.appendChild(resultItem);
+                    });
+                }
+                
+                searchResults.style.display = 'block';
+            });
+            
+            // Загрузка линий для выбранной остановки
+            function loadLinesForStop(stopId) {
                 // Находим trip_id для этой остановки
                 const stopTrips = stopTimesData
-                    .filter(st => st.stop_id === selectedStopId)
+                    .filter(st => st.stop_id === stopId)
                     .map(st => st.trip_id);
                 
                 // Находим route_id для этих trip_id
@@ -335,12 +466,18 @@
                 });
                 
                 lineSelect.disabled = availableRoutes.length === 0;
-                lineInfo.textContent = availableRoutes.length > 0 
-                    ? `Доступно линий: ${availableRoutes.length}` 
-                    : 'На этой остановке нет доступных линий';
+                
+                if (availableRoutes.length > 0) {
+                    lineInfo.style.display = 'block';
+                    lineInfo.textContent = `Доступно линий: ${availableRoutes.length}`;
+                } else {
+                    lineInfo.style.display = 'block';
+                    lineInfo.textContent = 'На этой остановке нет доступных линий';
+                    lineInfo.style.borderLeftColor = '#ff7e5f';
+                }
                 
                 updateGoButton();
-            });
+            }
             
             // Обработчик выбора линии
             lineSelect.addEventListener('change', function() {
@@ -349,9 +486,13 @@
                 if (selectedLine) {
                     // Находим информацию о выбранной линии
                     const route = routesData.find(r => r.route_short_name === selectedLine);
-                    lineInfo.textContent = `Линия: ${route.route_long_name || 'Без названия'}`;
+                    lineInfo.style.display = 'block';
+                    lineInfo.innerHTML = `
+                        <strong>Выбранная линия:</strong> ${route.route_short_name}
+                        <br><strong>Направление:</strong> ${route.route_long_name || 'Без названия'}
+                    `;
                 } else {
-                    lineInfo.textContent = '';
+                    lineInfo.style.display = 'none';
                 }
                 
                 updateGoButton();
@@ -359,7 +500,7 @@
             
             // Обновление состояния кнопки "Перейти"
             function updateGoButton() {
-                const stopSelected = stopSelect.value !== '';
+                const stopSelected = selectedStopId !== null;
                 const lineSelected = lineSelect.value !== '';
                 
                 goButton.disabled = !(stopSelected && lineSelected);
@@ -367,11 +508,17 @@
             
             // Обработчик нажатия кнопки "Перейти"
             goButton.addEventListener('click', function() {
-                const stopId = stopSelect.value;
                 const lineShortName = lineSelect.value;
                 
-                const url = `https://rainarthemir.github.io/ametis/tablotyperatp/?id=${stopId}&line=${lineShortName}`;
+                const url = `https://rainarthemir.github.io/ametis/tablotyperatp/?id=${selectedStopId}&line=${lineShortName}`;
                 window.location.href = url;
+            });
+            
+            // Закрытие результатов поиска при клике вне области
+            document.addEventListener('click', function(e) {
+                if (!stopSearch.contains(e.target) && !searchResults.contains(e.target)) {
+                    searchResults.style.display = 'none';
+                }
             });
             
             // Загружаем данные при загрузке страницы
