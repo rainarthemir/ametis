@@ -193,7 +193,7 @@ html, body {
 /* Первая строка */
 .alert-title {
   font-weight: 800;
-  font-size: 35px;
+  font-size: 32px;
   color: var(--black);
   margin-bottom: 12px;
   line-height: 1.2;
