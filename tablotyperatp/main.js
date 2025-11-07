@@ -554,15 +554,29 @@ function getLineColor(lineNumber) {
   // Цвета по умолчанию для разных типов линий
   const defaultColors = {
     'T1': '#0066CC', 'T2': '#0066CC', // Трамваи - синий
-    'N1': '#993399', 'N2': '#993399', // Ночные - фиолетовый
+    'N1': '#993399', 'N2': '#993399', 'N3': '#993399', 'N4': '#993399', // Ночные - фиолетовый
     '1': '#FF0000', '2': '#0066CC', '3': '#009900', '4': '#FF6600', '5': '#990099',
-    '6': '#66CC00', '7': '#FFCC00', '8': '#CC0066', '9': '#996633', '10': '#0099CC'
+    '6': '#66CC00', '7': '#FFCC00', '8': '#CC0066', '9': '#996633', '10': '#0099CC',
+    '12': '#FF6699'
   };
   
   return defaultColors[lineNumber] || '#666666';
 }
 
-// ---------- Очистка текста алерта ----------
+// ---------- Получение номера линии из line_id ----------
+function getLineNumberFromId(lineId) {
+  if (!lineId) return null;
+  
+  // Ищем паттерн AMI-XXX- где XXX - номер линии
+  const match = lineId.match(/AMI-([^-]+)-/);
+  if (match && match[1]) {
+    return match[1];
+  }
+  
+  return null;
+}
+
+// ---------- Очистка текста алерта с поддержкой HTML ----------
 function cleanAlertText(text) {
   if (!text) return '';
   
@@ -574,9 +588,61 @@ function cleanAlertText(text) {
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&nbsp;/g, ' ')
+    // Заменяем множественные переносы строк на одинарные
+    .replace(/\n\s*\n/g, '\n')
     // Убираем множественные пробелы
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+// ---------- Группировка одинаковых алертов ----------
+function groupAlerts(alerts) {
+  const grouped = new Map();
+  
+  alerts.forEach(alert => {
+    if (!alert.message) return;
+    
+    const cleanMessage = cleanAlertText(alert.message);
+    const lineNumber = alert.line_number || getLineNumberFromId(alert.line_id);
+    
+    if (!cleanMessage) return;
+    
+    // Создаем ключ для группировки по сообщению
+    const key = cleanMessage;
+    
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        message: cleanMessage,
+        lineNumbers: new Set(),
+        lineColors: new Map(),
+        originalAlerts: []
+      });
+    }
+    
+    const group = grouped.get(key);
+    
+    // Добавляем номер линии если он есть
+    if (lineNumber) {
+      group.lineNumbers.add(lineNumber);
+      // Сохраняем цвет для этой линии
+      const lineColor = getLineColor(lineNumber);
+      group.lineColors.set(lineNumber, lineColor);
+    }
+    
+    // Сохраняем оригинальный алерт для отладки
+    group.originalAlerts.push(alert);
+  });
+  
+  // Преобразуем в массив для отображения
+  return Array.from(grouped.values()).map(group => ({
+    message: group.message,
+    lineNumbers: Array.from(group.lineNumbers),
+    lineColors: Array.from(group.lineColors.entries()),
+    // Для обратной совместимости оставляем первый номер линии
+    lineNumber: group.lineNumbers.size > 0 ? Array.from(group.lineNumbers)[0] : null,
+    lineColor: group.lineColors.size > 0 ? Array.from(group.lineColors.values())[0] : '#666666',
+    count: group.originalAlerts.length
+  }));
 }
 
 // ---------- Форматирование сообщения алерта ----------
@@ -584,8 +650,8 @@ function formatAlertMessage(alert) {
   if (!alert.message) return null;
   
   const cleanMessage = cleanAlertText(alert.message);
-  const lineNumber = alert.line_number;
-  const lineColor = getLineColor(lineNumber);
+  const lineNumbers = alert.lineNumbers || [alert.lineNumber];
+  const lineColors = alert.lineColors || [[alert.lineNumber, alert.lineColor]];
   
   // Разделяем сообщение на части по переносам строк
   const parts = cleanMessage.split('\n').filter(part => part.trim());
@@ -603,11 +669,12 @@ function formatAlertMessage(alert) {
   }
   
   return {
-    lineNumber: lineNumber,
-    lineColor: lineColor,
+    lineNumbers: lineNumbers,
+    lineColors: lineColors,
     title: title,
     description: description,
-    fullMessage: cleanMessage
+    fullMessage: cleanMessage,
+    count: alert.count || 1
   };
 }
 
@@ -615,10 +682,13 @@ function formatAlertMessage(alert) {
 function createAlertHTML(alertData) {
   if (!alertData) return '';
   
-  const lineBadgeHTML = alertData.lineNumber ? 
-    `<div class="alert-line-badge" style="background: ${alertData.lineColor}">
-      ${alertData.lineNumber}
-    </div>` : '';
+  // Создаем бейджи для всех линий
+  const lineBadgesHTML = alertData.lineNumbers && alertData.lineNumbers.length > 0 
+    ? alertData.lineNumbers.map((lineNumber, index) => {
+        const lineColor = alertData.lineColors.find(([num]) => num === lineNumber)?.[1] || getLineColor(lineNumber);
+        return `<div class="alert-line-badge" style="background: ${lineColor}">${lineNumber}</div>`;
+      }).join('')
+    : '';
   
   const titleHTML = alertData.title ? 
     `<div class="alert-title">${alertData.title}</div>` : '';
@@ -627,7 +697,7 @@ function createAlertHTML(alertData) {
     `<div class="alert-description">${alertData.description}</div>` : '';
   
   return `
-    ${lineBadgeHTML}
+    ${lineBadgesHTML ? `<div class="alert-line-badges">${lineBadgesHTML}</div>` : ''}
     <div class="alert-content">
       ${titleHTML}
       ${descriptionHTML}
@@ -697,9 +767,12 @@ async function loadAlerts() {
     // Форматируем алерты для отображения
     const displayAlerts = [];
     
-    // Добавляем текущие алерты (en_cours)
+    // Обрабатываем текущие алерты (en_cours)
     if (websiteAlerts.en_cours && websiteAlerts.en_cours.length > 0) {
-      websiteAlerts.en_cours.forEach(alert => {
+      // Группируем одинаковые алерты
+      const groupedCurrentAlerts = groupAlerts(websiteAlerts.en_cours);
+      
+      groupedCurrentAlerts.forEach(alert => {
         const formattedAlert = formatAlertMessage(alert);
         if (formattedAlert) {
           displayAlerts.push(formattedAlert);
@@ -707,19 +780,26 @@ async function loadAlerts() {
       });
     }
     
-    // Добавляем предстоящие алерты (a_venir), исключая "Aucune perturbation"
+    // Обрабатываем предстоящие алерты (a_venir), исключая "Aucune perturbation"
     if (websiteAlerts.a_venir && websiteAlerts.a_venir.length > 0) {
-      websiteAlerts.a_venir.forEach(alert => {
-        if (alert.message && 
-            !alert.message.includes("Aucune perturbation de ligne à venir") &&
-            !alert.message.includes("Aucune perturbation")) {
+      const upcomingAlerts = websiteAlerts.a_venir.filter(alert => 
+        alert.message && 
+        !alert.message.includes("Aucune perturbation de ligne à venir") &&
+        !alert.message.includes("Aucune perturbation")
+      );
+      
+      if (upcomingAlerts.length > 0) {
+        // Группируем одинаковые алерты
+        const groupedUpcomingAlerts = groupAlerts(upcomingAlerts);
+        
+        groupedUpcomingAlerts.forEach(alert => {
           const formattedAlert = formatAlertMessage(alert);
           if (formattedAlert) {
             formattedAlert.title = `[À venir] ${formattedAlert.title}`;
             displayAlerts.push(formattedAlert);
           }
-        }
-      });
+        });
+      }
     }
     
     // Если алертов нет, возвращаем null для стандартного сообщения
