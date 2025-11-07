@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Поиск остановок и линий</title>
+    <style>
+        :root {
+            --primary: #4a6fa5;
+            --secondary: #6b8cbc;
+            --accent: #ff7e5f;
+            --light: #f5f7fa;
+            --dark: #2c3e50;
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 600px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+        
+        header {
+            background: var(--primary);
+            color: white;
+            padding: 24px;
+            text-align: center;
+        }
+        
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 8px;
+        }
+        
+        .subtitle {
+            opacity: 0.9;
+            font-weight: 300;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .form-group {
+            margin-bottom: 24px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--dark);
+        }
+        
+        select {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.3s;
+            background-color: white;
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232c3e50' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 16px center;
+            background-size: 16px;
+        }
+        
+        select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(74, 111, 165, 0.2);
+        }
+        
+        .info-text {
+            margin-top: 8px;
+            font-size: 14px;
+            color: #64748b;
+        }
+        
+        .button-container {
+            margin-top: 32px;
+            text-align: center;
+        }
+        
+        button {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 14px 32px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 6px rgba(255, 126, 95, 0.3);
+        }
+        
+        button:hover {
+            background: #ff6b4a;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(255, 126, 95, 0.4);
+        }
+        
+        button:disabled {
+            background: #cbd5e1;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+            color: var(--primary);
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(74, 111, 165, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--primary);
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        footer {
+            text-align: center;
+            padding: 20px;
+            color: #64748b;
+            font-size: 14px;
+            border-top: 1px solid #e1e8ed;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                border-radius: 12px;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Поиск остановок и линий</h1>
+            <p class="subtitle">Выберите остановку и нужную линию</p>
+        </header>
+        
+        <div class="content">
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                Загрузка данных...
+            </div>
+            
+            <div class="form-group">
+                <label for="stopSelect">Остановка:</label>
+                <select id="stopSelect">
+                    <option value="">-- Выберите остановку --</option>
+                </select>
+                <div class="info-text" id="stopInfo"></div>
+            </div>
+            
+            <div class="form-group">
+                <label for="lineSelect">Линия:</label>
+                <select id="lineSelect" disabled>
+                    <option value="">-- Сначала выберите остановку --</option>
+                </select>
+                <div class="info-text" id="lineInfo"></div>
+            </div>
+            
+            <div class="button-container">
+                <button id="goButton" disabled>Перейти</button>
+            </div>
+        </div>
+        
+        <footer>
+            <p>© 2023 Система поиска остановок</p>
+        </footer>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const stopSelect = document.getElementById('stopSelect');
+            const lineSelect = document.getElementById('lineSelect');
+            const goButton = document.getElementById('goButton');
+            const stopInfo = document.getElementById('stopInfo');
+            const lineInfo = document.getElementById('lineInfo');
+            const loading = document.getElementById('loading');
+            
+            let stopsData = [];
+            let routesData = [];
+            let tripsData = [];
+            let stopTimesData = [];
+            
+            // Загрузка данных
+            async function loadData() {
+                loading.style.display = 'block';
+                
+                try {
+                    // Загружаем данные об остановках
+                    const stopsResponse = await fetch('../gtfs/stops.txt');
+                    const stopsText = await stopsResponse.text();
+                    stopsData = parseCSV(stopsText);
+                    
+                    // Загружаем данные о маршрутах
+                    const routesResponse = await fetch('../gtfs/routes.txt');
+                    const routesText = await routesResponse.text();
+                    routesData = parseCSV(routesText);
+                    
+                    // Загружаем данные о рейсах
+                    const tripsResponse = await fetch('../gtfs/trips.txt');
+                    const tripsText = await tripsResponse.text();
+                    tripsData = parseCSV(tripsText);
+                    
+                    // Загружаем данные о времени остановок
+                    const stopTimesResponse = await fetch('../gtfs/stop_times.txt');
+                    const stopTimesText = await stopTimesResponse.text();
+                    stopTimesData = parseCSV(stopTimesText);
+                    
+                    populateStopSelect();
+                    loading.style.display = 'none';
+                } catch (error) {
+                    console.error('Ошибка загрузки данных:', error);
+                    loading.innerHTML = '<div style="color: red;">Ошибка загрузки данных. Проверьте подключение.</div>';
+                }
+            }
+            
+            // Парсинг CSV
+            function parseCSV(text) {
+                const lines = text.split('\n');
+                const headers = lines[0].split(',');
+                
+                const result = [];
+                for (let i = 1; i < lines.length; i++) {
+                    if (!lines[i].trim()) continue;
+                    
+                    const obj = {};
+                    const currentline = lines[i].split(',');
+                    
+                    for (let j = 0; j < headers.length; j++) {
+                        obj[headers[j].trim()] = currentline[j] ? currentline[j].trim() : '';
+                    }
+                    
+                    result.push(obj);
+                }
+                
+                return result;
+            }
+            
+            // Заполнение выпадающего списка остановок
+            function populateStopSelect() {
+                stopsData.forEach(stop => {
+                    const option = document.createElement('option');
+                    option.value = stop.stop_id;
+                    option.textContent = stop.stop_name;
+                    stopSelect.appendChild(option);
+                });
+            }
+            
+            // Обработчик выбора остановки
+            stopSelect.addEventListener('change', function() {
+                const selectedStopId = this.value;
+                
+                if (!selectedStopId) {
+                    lineSelect.disabled = true;
+                    lineSelect.innerHTML = '<option value="">-- Сначала выберите остановку --</option>';
+                    stopInfo.textContent = '';
+                    updateGoButton();
+                    return;
+                }
+                
+                // Находим выбранную остановку
+                const selectedStop = stopsData.find(stop => stop.stop_id === selectedStopId);
+                stopInfo.textContent = `Остановка: ${selectedStop.stop_name}`;
+                
+                // Находим trip_id для этой остановки
+                const stopTrips = stopTimesData
+                    .filter(st => st.stop_id === selectedStopId)
+                    .map(st => st.trip_id);
+                
+                // Находим route_id для этих trip_id
+                const routeIds = [...new Set(
+                    tripsData
+                        .filter(trip => stopTrips.includes(trip.trip_id))
+                        .map(trip => trip.route_id)
+                )];
+                
+                // Находим маршруты по route_id
+                const availableRoutes = routesData.filter(route => 
+                    routeIds.includes(route.route_id)
+                );
+                
+                // Заполняем выпадающий список линий
+                lineSelect.innerHTML = '<option value="">-- Выберите линию --</option>';
+                availableRoutes.forEach(route => {
+                    const option = document.createElement('option');
+                    option.value = route.route_short_name;
+                    option.textContent = `${route.route_short_name} - ${route.route_long_name || 'Без названия'}`;
+                    lineSelect.appendChild(option);
+                });
+                
+                lineSelect.disabled = availableRoutes.length === 0;
+                lineInfo.textContent = availableRoutes.length > 0 
+                    ? `Доступно линий: ${availableRoutes.length}` 
+                    : 'На этой остановке нет доступных линий';
+                
+                updateGoButton();
+            });
+            
+            // Обработчик выбора линии
+            lineSelect.addEventListener('change', function() {
+                const selectedLine = this.value;
+                
+                if (selectedLine) {
+                    // Находим информацию о выбранной линии
+                    const route = routesData.find(r => r.route_short_name === selectedLine);
+                    lineInfo.textContent = `Линия: ${route.route_long_name || 'Без названия'}`;
+                } else {
+                    lineInfo.textContent = '';
+                }
+                
+                updateGoButton();
+            });
+            
+            // Обновление состояния кнопки "Перейти"
+            function updateGoButton() {
+                const stopSelected = stopSelect.value !== '';
+                const lineSelected = lineSelect.value !== '';
+                
+                goButton.disabled = !(stopSelected && lineSelected);
+            }
+            
+            // Обработчик нажатия кнопки "Перейти"
+            goButton.addEventListener('click', function() {
+                const stopId = stopSelect.value;
+                const lineShortName = lineSelect.value;
+                
+                const url = `https://rainarthemir.github.io/ametis/tablotyperatp/?id=${stopId}&line=${lineShortName}`;
+                window.location.href = url;
+            });
+            
+            // Загружаем данные при загрузке страницы
+            loadData();
+        });
+    </script>
+</body>
+</html>
