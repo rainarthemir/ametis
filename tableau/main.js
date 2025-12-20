@@ -143,14 +143,33 @@ function isBusAtStop(tripUpdate) {
     const departureTime = stopUpdate.departure?.time;
     const arrivalTime = stopUpdate.arrival?.time;
     
+    // Если есть и прибытие и отправление
     if (departureTime && arrivalTime) {
-      // Если текущее время между временем прибытия и временем отправления
-      if (now >= arrivalTime && now <= departureTime) {
+      // Расширяем временное окно: за 10 секунд до прибытия и 5 секунд после отправления
+      const windowStart = arrivalTime - 10; // 10 секунд до прибытия
+      const windowEnd = departureTime + 5;  // 5 секунд после отправления
+      
+      if (now >= windowStart && now <= windowEnd) {
         return { atStop: true, stopId: stopUpdate.stopId };
       }
-    } else if (arrivalTime && !departureTime) {
-      // Если есть только время прибытия, считаем что автобус на остановке 30 секунд
-      if (now >= arrivalTime && now <= arrivalTime + 30) {
+    } 
+    // Если есть только время прибытия
+    else if (arrivalTime && !departureTime) {
+      // Считаем, что автобус стоит на остановке 15 секунд
+      const windowStart = arrivalTime - 10; // 10 секунд до прибытия
+      const windowEnd = arrivalTime + 5;    // 5 секунд после (условного) отправления
+      
+      if (now >= windowStart && now <= windowEnd) {
+        return { atStop: true, stopId: stopUpdate.stopId };
+      }
+    }
+    // Если есть только время отправления (редкий случай)
+    else if (departureTime && !arrivalTime) {
+      // Считаем, что автобус стоит на остановке 15 секунд до отправления
+      const windowStart = departureTime - 15; // 15 секунд до отправления
+      const windowEnd = departureTime + 5;    // 5 секунд после отправления
+      
+      if (now >= windowStart && now <= windowEnd) {
         return { atStop: true, stopId: stopUpdate.stopId };
       }
     }
@@ -166,11 +185,8 @@ async function loadTripData(tripId) {
     return;
   }
 
-  const [tripFeed, posFeed] = await Promise.all([
-    fetchFeed("https://proxy.transport.data.gouv.fr/resource/ametis-amiens-gtfs-rt-trip-update"),
-    fetchFeed("https://proxy.transport.data.gouv.fr/resource/ametis-amiens-gtfs-rt-vehicle-position")
-  ]);
-
+  const tripFeed = await fetchFeed("https://proxy.transport.data.gouv.fr/resource/ametis-amiens-gtfs-rt-trip-update");
+  
   const tu = tripFeed.entity.find(e => e.tripUpdate?.trip?.tripId === tripId)?.tripUpdate;
   
   // Проверяем, существует ли трип в статических данных
@@ -179,17 +195,17 @@ async function loadTripData(tripId) {
     return;
   }
   
-  if (!tu) {
-    document.getElementById("stops-display").innerHTML = '<div class="error">Нет реальных данных для этого маршрута</div>';
-    return;
-  }
-
   const trip = trips[tripId];
   const routeId = trip?.route_id;
   const color = routeColors[normalizeShort(routeId)] || "#000";
 
   document.getElementById("route-square").style.background = color;
   document.getElementById("route-id").textContent = routeId || "--";
+
+  if (!tu) {
+    document.getElementById("stops-display").innerHTML = '<div class="error">Нет реальных данных для этого маршрута</div>';
+    return;
+  }
 
   // Проверяем, находится ли автобус на остановке
   const { atStop, stopId } = isBusAtStop(tu);
@@ -205,8 +221,18 @@ async function loadTripData(tripId) {
     }
   } else {
     // Находим следующую остановку по времени
-    const next = tu.stopTimeUpdate.find(s => s.arrival?.time * 1000 > Date.now()) || tu.stopTimeUpdate[0];
-    const nextStopId = next?.stopId;
+    const now = Date.now();
+    const nextStopUpdate = tu.stopTimeUpdate.find(s => {
+      // Ищем следующую остановку, которая еще не была пройдена
+      const arrivalTime = s.arrival?.time * 1000;
+      const departureTime = s.departure?.time * 1000;
+      
+      if (arrivalTime && arrivalTime > now) return true;
+      if (departureTime && departureTime > now) return true;
+      return false;
+    }) || tu.stopTimeUpdate[tu.stopTimeUpdate.length - 1];
+    
+    const nextStopId = nextStopUpdate?.stopId;
     
     if (nextStopId) {
       showCurrentStop(nextStopId, color, false);
@@ -277,8 +303,17 @@ async function refreshTripStatus() {
       }
     } else {
       // Находим следующую остановку
-      const next = tu.stopTimeUpdate.find(s => s.arrival?.time * 1000 > Date.now()) || tu.stopTimeUpdate[0];
-      const nextStopId = next?.stopId;
+      const now = Date.now();
+      const nextStopUpdate = tu.stopTimeUpdate.find(s => {
+        const arrivalTime = s.arrival?.time * 1000;
+        const departureTime = s.departure?.time * 1000;
+        
+        if (arrivalTime && arrivalTime > now) return true;
+        if (departureTime && departureTime > now) return true;
+        return false;
+      }) || tu.stopTimeUpdate[tu.stopTimeUpdate.length - 1];
+      
+      const nextStopId = nextStopUpdate?.stopId;
       
       if (nextStopId) {
         showCurrentStop(nextStopId, color, false);
