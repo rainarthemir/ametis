@@ -5,6 +5,18 @@
   <title>Ametis Live Tracker</title>
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    .hidden {
+      display: none !important;
+    }
+    
+    .error {
+      color: #ff0000;
+      font-weight: bold;
+      padding: 20px;
+      text-align: center;
+    }
+  </style>
 </head>
 <body>
 
@@ -12,21 +24,17 @@
 <div id="top-banner">
   <div id="route-square"><span id="route-id">--</span></div>
   <div id="next-stop-banner">
-    PROCHAINE ARRÊT:&nbsp;<span id="next-stop-name">--</span>
+    <!-- Текст будет динамически меняться -->
   </div>
 </div>
 
 <!-- Основная область -->
 <div id="app">
   <div id="dashboard">
-    <div id="trip-select">
-      <label for="tripList">Sélectionner un trip:</label>
-      <select id="tripList">
-        <option value="">-- choisir un trip actif --</option>
-      </select>
+    <!-- Убрали выбор трипа, теперь он передается через URL -->
+    <div id="stops-display">
+      <!-- Здесь будут отображаться остановки -->
     </div>
-
-    <div id="stops-display"></div>
   </div>
 
   <div id="map">
