@@ -23,6 +23,10 @@ let shapeLayer = null;
 let stopMarkersLayer = null;
 let currentTripId = null;
 let currentColor = null;
+let nextStopId = null;
+let finalStopName = null;
+let bannerTextState = 0; // 0 = "PROCHAINE ARRÊT", 1 = "VERS"
+const bannerInterval = 2000; // 2 секунды между переключениями
 
 // ====== УТИЛИТЫ ======
 async function loadCsv(path) {
@@ -47,6 +51,28 @@ function getTripIdFromURL() {
   return params.get('trip');
 }
 
+// Функция для обновления верхнего баннера
+function updateBannerText() {
+  const banner = document.getElementById("next-stop-banner");
+  if (!banner) return;
+  
+  const nextStop = nextStopId ? stops[nextStopId]?.name : "--";
+  const finalStop = finalStopName || "--";
+  
+  // Переключаемся между двумя состояниями
+  if (bannerTextState === 0) {
+    banner.textContent = `PROCHAINE ARRÊT: ${nextStop}`;
+  } else {
+    banner.textContent = `VERS ${finalStop}`;
+  }
+  
+  // Переключаем состояние для следующего раза
+  bannerTextState = bannerTextState === 0 ? 1 : 0;
+}
+
+// Запускаем интервал для переключения текста баннера
+setInterval(updateBannerText, bannerInterval);
+
 // ====== ЗАГРУЗКА GTFS ======
 async function loadStaticData() {
   const [stopsList, routes, tripsList, shapesList, stopTimesList] = await Promise.all([
@@ -65,7 +91,11 @@ async function loadStaticData() {
   });
 
   tripsList.forEach(t => {
-    trips[t.trip_id] = { route_id: t.route_id, headsign: t.trip_headsign, shape_id: t.shape_id };
+    trips[t.trip_id] = { 
+      route_id: t.route_id, 
+      headsign: t.trip_headsign, 
+      shape_id: t.shape_id 
+    };
   });
 
   shapesList.forEach(s => {
@@ -110,7 +140,7 @@ function showCurrentStop(stopId, color, isOnStop = false) {
       </div>
     `;
   } else {
-    // Показываем следующие 4 остановки (старый вариант)
+    // Показываем следующие 4 остановки
     const list = stopTimes[currentTripId];
     if (!list) return;
     
@@ -178,6 +208,22 @@ function isBusAtStop(tripUpdate) {
   return { atStop: false, stopId: null };
 }
 
+// Получаем конечную остановку маршрута
+function getFinalStopName(tripId) {
+  const trip = trips[tripId];
+  if (!trip) return null;
+  
+  // Пробуем получить конечную остановку из trip_headsign
+  if (trip.headsign) return trip.headsign;
+  
+  // Если нет, берем последнюю остановку из stopTimes
+  const list = stopTimes[tripId];
+  if (!list || list.length === 0) return null;
+  
+  const lastStopId = list[list.length - 1].stop_id;
+  return stops[lastStopId]?.name || null;
+}
+
 // ====== ЗАГРУЗКА И ОТОБРАЖЕНИЕ ТРИПА ======
 async function loadTripData(tripId) {
   if (!tripId) {
@@ -202,6 +248,9 @@ async function loadTripData(tripId) {
   document.getElementById("route-square").style.background = color;
   document.getElementById("route-id").textContent = routeId || "--";
 
+  // Получаем конечную остановку
+  finalStopName = getFinalStopName(tripId);
+
   if (!tu) {
     document.getElementById("stops-display").innerHTML = '<div class="error">Нет реальных данных для этого маршрута</div>';
     return;
@@ -211,6 +260,9 @@ async function loadTripData(tripId) {
   const { atStop, stopId } = isBusAtStop(tu);
   
   if (atStop && stopId) {
+    // Устанавливаем текущую остановку
+    nextStopId = stopId;
+    
     // Показываем только текущую остановку
     showCurrentStop(stopId, color, true);
     
@@ -221,18 +273,18 @@ async function loadTripData(tripId) {
     }
   } else {
     // Находим следующую остановку по времени
-    const now = Date.now();
+    const now = Math.floor(Date.now() / 1000);
     const nextStopUpdate = tu.stopTimeUpdate.find(s => {
       // Ищем следующую остановку, которая еще не была пройдена
-      const arrivalTime = s.arrival?.time * 1000;
-      const departureTime = s.departure?.time * 1000;
+      const arrivalTime = s.arrival?.time;
+      const departureTime = s.departure?.time;
       
       if (arrivalTime && arrivalTime > now) return true;
       if (departureTime && departureTime > now) return true;
       return false;
     }) || tu.stopTimeUpdate[tu.stopTimeUpdate.length - 1];
     
-    const nextStopId = nextStopUpdate?.stopId;
+    nextStopId = nextStopUpdate?.stopId;
     
     if (nextStopId) {
       showCurrentStop(nextStopId, color, false);
@@ -244,6 +296,9 @@ async function loadTripData(tripId) {
       }
     }
   }
+
+  // Обновляем баннер сразу
+  updateBannerText();
 
   // Очищаем предыдущие слои
   if (shapeLayer) map.removeLayer(shapeLayer);
@@ -294,6 +349,9 @@ async function refreshTripStatus() {
     const { atStop, stopId } = isBusAtStop(tu);
     
     if (atStop && stopId) {
+      // Устанавливаем текущую остановку
+      nextStopId = stopId;
+      
       showCurrentStop(stopId, color, true);
       
       // Обновляем центр карты
@@ -303,17 +361,17 @@ async function refreshTripStatus() {
       }
     } else {
       // Находим следующую остановку
-      const now = Date.now();
+      const now = Math.floor(Date.now() / 1000);
       const nextStopUpdate = tu.stopTimeUpdate.find(s => {
-        const arrivalTime = s.arrival?.time * 1000;
-        const departureTime = s.departure?.time * 1000;
+        const arrivalTime = s.arrival?.time;
+        const departureTime = s.departure?.time;
         
         if (arrivalTime && arrivalTime > now) return true;
         if (departureTime && departureTime > now) return true;
         return false;
       }) || tu.stopTimeUpdate[tu.stopTimeUpdate.length - 1];
       
-      const nextStopId = nextStopUpdate?.stopId;
+      nextStopId = nextStopUpdate?.stopId;
       
       if (nextStopId) {
         showCurrentStop(nextStopId, color, false);
