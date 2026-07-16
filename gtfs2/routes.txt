@@ -1,0 +1,29 @@
+route_id,agency_id,route_short_name,route_long_name,route_desc,route_type,route_url,route_color,route_text_color,route_sort_order
+AMI:11-1,ametis,11,Etouvie <> Saleux,,3,,942A1F,FFFFFF,130
+AMI:12-1,ametis,12,Sains-en-Amiénois <> Bertangles,,3,,55B28A,FFFFFF,140
+AMI:14-1,ametis,14,Petit Blangy <> Gare du Nord,,3,,715995,FFFFFF,160
+AMI:9-1,ametis,9,La Haute Borne - Allonville <> Vers-sur-Selle - Laënnec,,3,,60689A,FFFFFF,100
+AMI:R61-1,ametis,R61,Gare du Nord <> Remiencourt,,3,,00ADC2,FFFFFF,300
+AMI:R62-1,ametis,R62,Gare du Nord <> Estrées-sur-Noye,,3,,00ADC2,FFFFFF,310
+AMI:R63-1,ametis,R63,Gare du Nord <> Creuse,,3,,00ADC2,FFFFFF,320
+AMI:R64-1,ametis,R64,Mairie de Camon <> Camon Miroir,,3,,00ADC2,FFFFFF,340
+AMI:R65-1,ametis,R65,Gare du Nord <> Saint-Vaast-en-Chaussée,,3,,00ADC2,FFFFFF,341
+AMI:R66-1,ametis,R66,Gare du Nord <> Querrieu,,3,,00ADC2,FFFFFF,350
+AMI:R68-1,ametis,R68,Gare du Nord <> Crematorium,,3,,00ADC2,FFFFFF,365
+AMI:10-1,ametis,10,CHU A. Picardie <> Boves M.Barbier/Centre commercial Glisy,,3,,CA366B,FFFFFF,110
+AMI:13-1,ametis,13,Centre Commercial Glisy <> Gare du Nord,,3,,00484B,FFFFFF,150
+AMI:15-1,ametis,15,Dury <> Gare du Nord,,3,,E94D51,FFFFFF,200
+AMI:16-1,ametis,16,Saveuse <> Gare du Nord,,3,,688073,FFFFFF,240
+AMI:5A-1,ametis,5A,Laënnec,,3,,E87FB0,FFFFFF,51
+AMI:5B-1,ametis,5B,Laënnec,,3,,E87FB0,FFFFFF,52
+AMI:6-1,ametis,6,Pôle d'Echanges Nord <> Görlitz,,3,,59378C,FFFFFF,60
+AMI:7-1,ametis,7,CHU A. Picardie <> Z.A La Blanche Tâche,,3,,236332,FFFFFF,70
+AMI:8-1,ametis,8,Etouvie <> Gare du Nord,,3,,E46F0B,FFFFFF,90
+AMI:CDV-1,ametis,CDV,Cœur de Ville,,3,,99C558,FFFFFF,250
+AMI:L-1,ametis,L,Pôle d’Echanges Nord/Centre Commercial Nord <>  CHU A.Picardie,,3,,84246C,FFFFFF,45
+AMI:N1-1,ametis,N1,Etouvie <> Pôle Jules Verne,,3,,2880C0,FFFFFF,6
+AMI:N2-1,ametis,N2,La Paix <> IUT P+R,,3,,CD2D20,FFFFFF,20
+AMI:N3-1,ametis,N3,Promenade P+R <> Centre commercial Sud,,3,,479D42,FFFFFF,30
+AMI:N4-1,ametis,N4,Pôle Licorne P+R <> Longueau SNCF,,3,,F0AB07,FFFFFF,40
+AMI:NAM1-1,ametis,M1,Navette marché St Maurice,,3,,5291CD,FFFFFF,260
+AMI:NAM2-1,ametis,M2,Navette marché St Pierre,,3,,79A6CC,FFFFFF,270
