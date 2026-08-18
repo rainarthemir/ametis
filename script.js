@@ -10,22 +10,23 @@ let currentRouteId = null;
 let currentTripId = null;
 let allTripUpdates = {};
 
-const stops = {};
-const trips = {};          // из GTFS (для быстрого доступа к route_id и т.д.)
-const shapes = {};         // из GTFS (оставим для обратной совместимости, но будем использовать shapes из GTFS2)
-const routeColors = {};    // из GTFS2
-const stopTimes = {};      // из GTFS (расширен: { stop_id, seq, departure_time })
+const stops = {};            // stop_id → { name, lat, lon } (из GTFS)
+const stopsGtfs = {};        // stop_id → stop_name (из GTFS)
+const trips = {};            // GTFS trip_id → { route_id, headsign, shape_id }
+const shapes = {};           // shape_id → [[lat,lon], ...] (из GTFS, но не используется)
+const routeColors = {};      // route_short_name → цвет (из GTFS2)
+const stopTimes = {};        // GTFS trip_id → [{ stop_id, seq, departure_time }]
 
-// Новые хранилища для GTFS2
-let gtfs2Trips = {};        // trip_id → { route_id, shape_id, service_id, stop_ids, departure_time }
-let gtfs2Calendar = {};     // service_id → дни недели (объект с boolean)
-let gtfs2StopTimes = {};    // trip_id → массив { stop_id, seq, departure_time } (для справки)
-let gtfsToGtfs2Map = {};    // кэш соответствий: gtfs_trip_id → gtfs2_trip_id
+// Новые структуры для GTFS2
+let gtfs2Trips = {};         // GTFS2 trip_id → { route_id, shape_id, service_id, stop_names, departure_time }
+let gtfs2Calendar = {};      // service_id → { monday, tuesday, ... }
+let gtfsToGtfs2Map = {};     // кэш: GTFS trip_id → GTFS2 trip_id
 let stopTimesIndexed = false;
 
 /* ===== Утилиты ===== */
 async function loadCsv(path) {
   const res = await fetch(path);
+  if (!res.ok) throw new Error(`HTTP ${res.status} for ${path}`);
   const text = await res.text();
   const [header, ...rows] = text.trim().split(/\r?\n/);
   const headers = header.split(",");
@@ -36,27 +37,27 @@ async function loadCsv(path) {
     return o;
   });
 }
+
 function nowMs() { return Date.now(); }
+
 function normalizeShort(name) {
   if (!name) return "";
   return String(name).toLowerCase().trim().replace(/[^a-z0-9]/g,"");
 }
+
 function clearStopLayer() {
   stopLayer.clearLayers();
 }
-function secToMs(sec) { return sec * 1000; }
+
 function getCurrentDayMask() {
-  // возвращает битовую маску дня недели (0=воскресенье? зависит от GTFS)
-  // в GTFS дни: monday=1, tuesday=2, ...
   const days = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
-  const now = new Date();
-  const dow = now.getDay(); // 0=воскресенье
-  return days[dow];
+  return days[new Date().getDay()];
 }
+
 function isTripActiveToday(service_id) {
   if (!service_id) return true;
   const cal = gtfs2Calendar[service_id];
-  if (!cal) return true; // если нет календаря, считаем активным
+  if (!cal) return true;
   const today = getCurrentDayMask();
   return cal[today] === true;
 }
@@ -64,45 +65,56 @@ function isTripActiveToday(service_id) {
 /* ===== Загрузка GTFS ===== */
 async function loadStaticData() {
   console.log("⏳ Загрузка GTFS...");
-  // Загружаем все необходимые файлы из обоих наборов
+  // Загружаем все необходимые файлы (обрабатываем отсутствие shapes.txt в первом наборе)
   const [stopsList, routes, tripsList, shapesList, stopTimesList,
-         trips2, stopTimes2, calendar, calendarDates] = await Promise.all([
+         trips2, stopTimes2, calendar, calendarDates, stops2List] = await Promise.all([
     loadCsv("gtfs/stops.txt"),
     loadCsv("gtfs2/routes.txt"),
     loadCsv("gtfs/trips.txt"),
-    loadCsv("gtfs/shapes.txt"),
+    loadCsv("gtfs/shapes.txt").catch(()=>[]),   // может не быть
     loadCsv("gtfs/stop_times.txt"),
     loadCsv("gtfs2/trips.txt"),
     loadCsv("gtfs2/stop_times.txt"),
-    loadCsv("gtfs2/calendar.txt").catch(()=>[]),  // может отсутствовать
-    loadCsv("gtfs2/calendar_dates.txt").catch(()=>[]) // может отсутствовать
+    loadCsv("gtfs2/calendar.txt").catch(()=>[]),
+    loadCsv("gtfs2/calendar_dates.txt").catch(()=>[]),
+    loadCsv("gtfs2/stops.txt").catch(()=>[])    // остановки из GTFS2 (если есть)
   ]);
 
-  // --- stops (из gtfs) ---
-  stopsList.forEach(s=>stops[s.stop_id]={ name:s.stop_name, lat:+s.stop_lat, lon:+s.stop_lon });
+  // --- stops (GTFS) ---
+  stopsList.forEach(s=>{
+    stopsGtfs[s.stop_id] = s.stop_name;
+    stops[s.stop_id] = { name:s.stop_name, lat:+s.stop_lat, lon:+s.stop_lon };
+  });
 
-  // --- routes (из gtfs2) ---
+  // --- stops (GTFS2) для сопоставления названий ---
+  const stopNameFromGtfs2 = {};
+  stops2List.forEach(s=>{
+    stopNameFromGtfs2[s.stop_id] = s.stop_name;
+  });
+
+  // --- routes (GTFS2) ---
   routes.forEach(r=>{
     const key = normalizeShort(r.route_short_name || r.route_id);
     routeColors[key] = "#" + (r.route_color?.padStart(6,"0") || "000000");
   });
 
-  // --- trips (из gtfs) ---
+  // --- trips (GTFS) ---
   tripsList.forEach(t=>{
     trips[t.trip_id] = { route_id:t.route_id, headsign:t.trip_headsign, shape_id:t.shape_id };
   });
 
-  // --- shapes (из gtfs) --- (оставим для обратной совместимости, но использовать будем из gtfs2)
-  shapesList.forEach(s=>{
-    if (!shapes[s.shape_id]) shapes[s.shape_id] = [];
-    shapes[s.shape_id].push([+s.shape_pt_lat, +s.shape_pt_lon, +s.shape_pt_sequence]);
-  });
-  for (const id in shapes) shapes[id].sort((a,b)=>a[2]-b[2]);
+  // --- shapes (GTFS) – игнорируем, т.к. будем брать из GTFS2 ---
+  if (shapesList.length) {
+    shapesList.forEach(s=>{
+      if (!shapes[s.shape_id]) shapes[s.shape_id] = [];
+      shapes[s.shape_id].push([+s.shape_pt_lat, +s.shape_pt_lon, +s.shape_pt_sequence]);
+    });
+    for (const id in shapes) shapes[id].sort((a,b)=>a[2]-b[2]);
+  }
 
-  // --- stop_times (из gtfs) --- сохраняем с временем
+  // --- stop_times (GTFS) с временем отправления ---
   stopTimesList.forEach(st=>{
     if (!stopTimes[st.trip_id]) stopTimes[st.trip_id] = [];
-    // departure_time может быть в формате HH:MM:SS или просто число секунд
     let dep = st.departure_time;
     if (typeof dep === 'string' && dep.includes(':')) {
       const parts = dep.split(':').map(Number);
@@ -118,7 +130,7 @@ async function loadStaticData() {
   });
   for (const t in stopTimes) stopTimes[t].sort((a,b)=>a.seq - b.seq);
 
-  // --- calendar (из gtfs2) ---
+  // --- calendar (GTFS2) ---
   calendar.forEach(c=>{
     const serviceId = c.service_id;
     gtfs2Calendar[serviceId] = {
@@ -130,12 +142,9 @@ async function loadStaticData() {
       saturday: c.saturday === '1',
       sunday: c.sunday === '1'
     };
-    // можно также обработать start_date / end_date, но для простоты опустим
   });
-  // calendar_dates (исключения) – можно добавить, но для краткости пропустим
 
-  // --- trips (из gtfs2) и stop_times2 ---
-  // Сначала построим stop_times2 индекс
+  // --- Строим индекс GTFS2 ---
   const stopTimes2ByTrip = {};
   stopTimes2.forEach(st=>{
     if (!stopTimes2ByTrip[st.trip_id]) stopTimes2ByTrip[st.trip_id] = [];
@@ -154,21 +163,22 @@ async function loadStaticData() {
   });
   for (const t in stopTimes2ByTrip) stopTimes2ByTrip[t].sort((a,b)=>a.seq - b.seq);
 
-  // Теперь построим gtfs2Trips
   trips2.forEach(t=>{
     const tid = t.trip_id;
     const stList = stopTimes2ByTrip[tid] || [];
-    if (stList.length === 0) return; // без остановок не используем
-    const stopIds = stList.map(s => s.stop_id);
+    if (stList.length === 0) return;
+    // Получаем последовательность названий остановок (сначала из GTFS2, потом из GTFS)
+    const stopNames = stList.map(s => {
+      return stopNameFromGtfs2[s.stop_id] || stopsGtfs[s.stop_id] || s.stop_id;
+    });
     const departureTime = stList[0].departure_time;
     gtfs2Trips[tid] = {
       route_id: t.route_id,
       shape_id: t.shape_id,
       service_id: t.service_id,
-      stop_ids: stopIds,
+      stop_names: stopNames,
       departure_time: departureTime
     };
-    gtfs2StopTimes[tid] = stList;
   });
 
   stopTimesIndexed = true;
@@ -177,36 +187,35 @@ async function loadStaticData() {
 
 /* ===== Сопоставление trip_id ===== */
 function findMatchingGtfs2Trip(gtfsTripId) {
-  // Проверяем кэш
   if (gtfsToGtfs2Map[gtfsTripId]) return gtfsToGtfs2Map[gtfsTripId];
 
   const gtfsStops = stopTimes[gtfsTripId];
   if (!gtfsStops || gtfsStops.length === 0) {
-    console.warn("Нет stop_times для GTFS trip", gtfsTripId);
+    //console.warn("Нет stop_times для GTFS trip", gtfsTripId);
     return null;
   }
-  const gtfsStopIds = gtfsStops.map(s => s.stop_id);
+  const gtfsStopNames = gtfsStops.map(s => stopsGtfs[s.stop_id] || s.stop_id);
   const gtfsDeparture = gtfsStops[0].departure_time;
 
   let bestMatch = null;
   let bestDiff = Infinity;
 
   for (const [tid2, info] of Object.entries(gtfs2Trips)) {
-    // Проверка дня недели (если есть календарь)
+    // Фильтр по дню недели
     if (!isTripActiveToday(info.service_id)) continue;
 
-    // Сравнение последовательности остановок (полное совпадение)
-    if (info.stop_ids.length !== gtfsStopIds.length) continue;
+    // Сравнение последовательности названий
+    if (info.stop_names.length !== gtfsStopNames.length) continue;
     let match = true;
-    for (let i = 0; i < info.stop_ids.length; i++) {
-      if (info.stop_ids[i] !== gtfsStopIds[i]) {
+    for (let i = 0; i < info.stop_names.length; i++) {
+      if (info.stop_names[i] !== gtfsStopNames[i]) {
         match = false;
         break;
       }
     }
     if (!match) continue;
 
-    // Сравнение времени отправления
+    // Сравнение времени отправления (в секундах)
     const diff = Math.abs(info.departure_time - gtfsDeparture);
     if (diff < bestDiff) {
       bestDiff = diff;
@@ -214,24 +223,19 @@ function findMatchingGtfs2Trip(gtfsTripId) {
     }
   }
 
-  // Порог в 10 минут (600 секунд)
+  // Порог 10 минут (600 секунд)
   if (bestMatch && bestDiff <= 600) {
     gtfsToGtfs2Map[gtfsTripId] = bestMatch;
-    console.log(`Сопоставлено: GTFS trip ${gtfsTripId} → GTFS2 trip ${bestMatch} (diff ${bestDiff} сек)`);
+    //console.log(`Сопоставлено: GTFS trip ${gtfsTripId} → GTFS2 trip ${bestMatch} (diff ${bestDiff} сек)`);
     return bestMatch;
   } else {
-    console.warn(`Не найдено соответствие для GTFS trip ${gtfsTripId}`);
+    //console.warn(`Не найдено соответствие для GTFS trip ${gtfsTripId}`);
     return null;
   }
 }
 
-/* ===== Отображение остановок (без изменений, но используем сопоставление для получения tripId) ===== */
+/* ===== Отображение остановок ===== */
 function drawTripStops(tripId, nextStopId) {
-  // tripId здесь может быть из GTFS2? Для отображения остановок нам нужны stop_times из GTFS (т.к. остановки общие)
-  // Но мы можем использовать stopTimes из GTFS, т.к. у нас есть соответствие. Однако лучше использовать тот же tripId, что и для маршрута (из GTFS2) 
-  // для получения stop_times, но так как остановки одинаковы, можно использовать любой.
-  // Для простоты оставим как есть: используем tripId из GTFS (переданный). Но чтобы не путать, передадим оригинальный gtfsTripId.
-  // В текущем коде drawTripStops вызывается с tripId из реального времени (gtfs). Это нормально.
   if (!stopTimesIndexed) return;
   const list = stopTimes[tripId];
   if (!list || !list.length) return;
@@ -276,6 +280,53 @@ function drawTripStops(tripId, nextStopId) {
   updateStopLabelsVisibility();
 }
 
+/* ===== Подписи остановок ===== */
+const MIN_ZOOM_LABELS = 15;
+function updateStopLabelsVisibility() {
+  const zoom = map.getZoom();
+  stopLayer.eachLayer(layer => {
+    if (layer instanceof L.Marker && layer.getElement()) {
+      const idx = layer.options.stopIndex;
+      if (idx === 0 || idx === stopTimes[currentTripId]?.length-1) {
+        layer.getElement().style.display = "block";
+      } else {
+        layer.getElement().style.display = zoom >= MIN_ZOOM_LABELS ? "block" : "none";
+      }
+    }
+  });
+}
+map.on("zoomend", updateStopLabelsVisibility);
+
+/* ===== Мигание остановок ===== */
+function updateBlinkingStop() {
+  if (!currentTripId || !stopTimesIndexed) return;
+  const list = stopTimes[currentTripId];
+  if (!list || !list.length) return;
+
+  let nextIdx = -1;
+  const now = nowMs();
+  const tu = allTripUpdates[currentTripId];
+  if (tu?.stopTimeUpdate?.length) {
+    const future = tu.stopTimeUpdate.find(s=>s.arrival?.time*1000 > now);
+    const next = future || tu.stopTimeUpdate[tu.stopTimeUpdate.length - 1];
+    if (next) nextIdx = list.findIndex(s=>s.stop_id===next.stopId);
+  }
+
+  stopLayer.eachLayer(layer => {
+    if (!(layer instanceof L.CircleMarker)) return;
+    const stopIdx = layer.options.stopIndex;
+    if (stopIdx === nextIdx) {
+      layer._blinking = true;
+      layer.getElement()?.classList.add("blinking");
+    } else {
+      layer._blinking = false;
+      layer.getElement()?.classList.remove("blinking");
+      layer.setStyle({ fillColor: stopIdx < nextIdx ? "#ccc" : "white" });
+    }
+  });
+}
+setInterval(updateBlinkingStop, 1000);
+
 /* ===== Обновление видимых машин ===== */
 function updateVisibleVehicles(tripUpdates) {
   markers.forEach(m=>map.removeLayer(m));
@@ -292,20 +343,16 @@ function updateVisibleVehicles(tripUpdates) {
     const v = e.vehicle;
     const gtfsTripId = v.trip?.tripId;
     if (!gtfsTripId) return;
-    // Сопоставляем с GTFS2
+
     const gtfs2TripId = findMatchingGtfs2Trip(gtfsTripId);
-    if (!gtfs2TripId) {
-      // Если не нашли, пропускаем этот транспорт (или можно использовать данные из GTFS, но без shape)
-      // Для демонстрации пропустим.
-      return;
-    }
+    if (!gtfs2TripId) return; // пропускаем, если не нашли
+
     const tripInfo2 = gtfs2Trips[gtfs2TripId];
     if (!tripInfo2) return;
 
     const routeId2 = tripInfo2.route_id;
     const color = routeColors[normalizeShort(routeId2)] || "#666";
-    const shortName = routeId2.toUpperCase(); // или можно взять из routes
-    // headsign можно взять из GTFS или GTFS2 – для простоты оставим пустым или из GTFS
+    const shortName = routeId2.toUpperCase();
     const headsign = trips[gtfsTripId]?.headsign || "";
 
     let nextStopId = null, nextStopName = "—";
@@ -334,24 +381,23 @@ function updateVisibleVehicles(tripUpdates) {
       });
 
     marker.on("click", ()=>{
-      // При клике используем сопоставленный trip_id из GTFS2 для получения shape
-      currentRouteId = routeId2; // сохраняем route_id из GTFS2
-      currentTripId = gtfsTripId; // сохраняем оригинальный GTFS trip для остановок (можно и gtfs2TripId, но остановки одинаковы)
+      currentRouteId = routeId2;
+      currentTripId = gtfsTripId;
       if (currentShapeLayer) map.removeLayer(currentShapeLayer);
       clearStopLayer();
 
-      // Получаем shape из GTFS2
-      if (tripInfo2.shape_id && shapes[tripInfo2.shape_id]) {
-        const pts = shapes[tripInfo2.shape_id].map(p=>[p[0],p[1]]);
+      // Используем shape из GTFS2
+      const shapeId = tripInfo2.shape_id;
+      if (shapeId && shapes[shapeId]) {
+        const pts = shapes[shapeId].map(p=>[p[0],p[1]]);
         currentShapeLayer = L.polyline(pts, { color, weight:4 }).addTo(map);
         map.fitBounds(currentShapeLayer.getBounds());
       } else {
-        // Если shape нет, можно попробовать из GTFS, но лучше предупредить
-        console.warn("Нет shape для", gtfs2TripId);
+        // Если shape нет в shapes (из GTFS), попробуем загрузить из GTFS2 напрямую? 
+        // Для этого нужно было бы загрузить shapes.txt из GTFS2.
+        console.warn("Shape не найден для", gtfs2TripId);
       }
-      // Рисуем остановки по оригинальному GTFS trip (они одинаковы)
       if (nextStopId) drawTripStops(gtfsTripId, nextStopId);
-      // Обновляем видимые машины (перерисовка)
       updateVisibleVehicles(tripUpdates);
       marker.openPopup();
     });
@@ -360,7 +406,7 @@ function updateVisibleVehicles(tripUpdates) {
   });
 }
 
-/* ===== Прото и загрузка RT (без изменений) ===== */
+/* ===== Загрузка RT ===== */
 async function initProto() {
   const root = await protobuf.load("gtfs-realtime.proto");
   FeedMessage = root.lookupType("transit_realtime.FeedMessage");
@@ -400,57 +446,10 @@ document.getElementById("resetViewBtn").addEventListener("click", ()=>{
   updateVisibleVehicles(allTripUpdates);
 });
 
-/* ===== Подписи остановок (без изменений) ===== */
-const MIN_ZOOM_LABELS = 15;
-function updateStopLabelsVisibility() {
-  const zoom = map.getZoom();
-  stopLayer.eachLayer(layer => {
-    if (layer instanceof L.Marker && layer.getElement()) {
-      const idx = layer.options.stopIndex;
-      if (idx === 0 || idx === stopTimes[currentTripId]?.length-1) {
-        layer.getElement().style.display = "block";
-      } else {
-        layer.getElement().style.display = zoom >= MIN_ZOOM_LABELS ? "block" : "none";
-      }
-    }
-  });
-}
-map.on("zoomend", updateStopLabelsVisibility);
-
-/* ===== Мигание остановок (без изменений) ===== */
-function updateBlinkingStop() {
-  if (!currentTripId || !stopTimesIndexed) return;
-  const list = stopTimes[currentTripId];
-  if (!list || !list.length) return;
-
-  let nextIdx = -1;
-  const now = nowMs();
-  const tu = allTripUpdates[currentTripId];
-  if (tu?.stopTimeUpdate?.length) {
-    const future = tu.stopTimeUpdate.find(s=>s.arrival?.time*1000 > now);
-    const next = future || tu.stopTimeUpdate[tu.stopTimeUpdate.length - 1];
-    if (next) nextIdx = list.findIndex(s=>s.stop_id===next.stopId);
-  }
-
-  stopLayer.eachLayer(layer => {
-    if (!(layer instanceof L.CircleMarker)) return;
-    const stopIdx = layer.options.stopIndex;
-    if (stopIdx === nextIdx) {
-      layer._blinking = true;
-      layer.getElement()?.classList.add("blinking");
-    } else {
-      layer._blinking = false;
-      layer.getElement()?.classList.remove("blinking");
-      layer.setStyle({ fillColor: stopIdx < nextIdx ? "#ccc" : "white" });
-    }
-  });
-}
-setInterval(updateBlinkingStop, 1000);
-
 /* ===== Инициализация ===== */
 (async ()=>{
   await initProto();
   await loadStaticData();
   await loadVehicles();
-  setInterval(loadVehicles, 1000);
+  setInterval(loadVehicles, 5000); // обновление каждые 5 секунд
 })();
